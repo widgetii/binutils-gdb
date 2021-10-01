@@ -132,6 +132,9 @@ static int process_links = false;       /* --process-links.  */
 
 static int demangle_flags = DMGL_ANSI | DMGL_PARAMS;
 
+static unsigned long cur_data;
+static unsigned long cur_offset;
+
 /* A structure to record the sections mentioned in -j switches.  */
 struct only
 {
@@ -1445,7 +1448,8 @@ objdump_print_addr_with_sym (bfd *abfd, asection *sec, asymbol *sym,
       else if (vma > bfd_asymbol_value (sym))
 	{
 	  (*inf->fprintf_func) (inf->stream, "L_");
-	  objdump_print_value (vma - bfd_asymbol_value (sym), inf, true);
+
+	  objdump_print_value (vma - bfd_asymbol_value (sym) + cur_offset, inf, true);
 	}
 
       //(*inf->fprintf_func) (inf->stream, ">");
@@ -2714,8 +2718,6 @@ printf_ldr (char *buf)
     printf ("%s", buf);
 }
 
-static unsigned long cur_data;
-
 static void
 printf_word (char *buf)
 {
@@ -3564,6 +3566,8 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
 	    pinfo->fprintf_func (pinfo->stream, "\t.global %s\n", bfd_asymbol_name (sym));
 	  if (sym->flags & BSF_FUNCTION)
 	    pinfo->fprintf_func (pinfo->stream, "\t.type\t%s, %%function\n", bfd_asymbol_name (sym));
+	  cur_offset = addr;
+	  //printf("offset %#lX\n", addr);
 	  //objdump_print_addr_with_sym (abfd, section, sym, addr,
 				       //pinfo, false);
 	  pinfo->fprintf_func (pinfo->stream, "%s:\n", bfd_asymbol_name (sym));
