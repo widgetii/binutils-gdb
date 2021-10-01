@@ -2750,23 +2750,60 @@ printf_word (char *buf)
 }
 
 static void
+printf_movx(char* buf) {
+  static regex_t regex;
+  static int reinit;
+  if (!reinit)
+    {
+      if (!compile_re (&regex, "(mov[wt])\\s+(.+), #0"))
+	return;
+      reinit = 1;
+    }
+
+  regmatch_t matches[3];
+  if (regexec (&regex, buf, sizeof (matches) / sizeof (matches[0]),
+	       (regmatch_t *) &matches, 0)
+      == 0)
+    {
+      regoff_t op_start = matches[1].rm_so;
+      regoff_t op_end = matches[1].rm_eo;
+      buf[op_end] = 0;
+
+      regoff_t data_start = matches[2].rm_so;
+      regoff_t data_end = matches[2].rm_eo;
+      buf[data_end] = 0;
+
+      printf ("%s\t%s, ", buf + op_start, buf + data_start);
+      if (buf[op_start+3] == 'w') {
+        printf("#:lower16:");
+      } else if (buf[op_start+3] == 't') {
+        printf("#:upper16:");
+      }
+    }
+  else
+    // fallback
+    printf ("%s", buf);
+}
+
+static void
 printf_to_asm (char *buf)
 {
-  if (!strncmp (buf, "b", 1))
-    printf_branch (buf);
-  else if (!strncmp (buf, "ldr", 3))
-    printf_ldr(buf);
-  else if (!strncmp(buf, ".word", 5))
-    printf_word(buf);
-  else
-    {
-      char *comment = strchr (buf, ';');
-      if (comment)
+	char *comment = strchr (buf, ';');
+	if (comment)
+		*comment = '@';
+
+	if (!strncmp (buf, "b", 1))
+		printf_branch (buf);
+	else if (!strncmp (buf, "ldr", 3))
+		printf_ldr(buf);
+	else if (!strncmp (buf, "movw\t", 5) || !strncmp (buf, "movt\t", 5))
+		printf_movx(buf);
+	else if (!strncmp(buf, ".word", 5))
+		printf_word(buf);
+	else
 	{
-	  *comment = '@';
+		printf ("%s", buf);
 	}
-      printf ("%s", buf);
-    }
 }
 
 
@@ -3184,6 +3221,10 @@ disassemble_bytes (struct disassemble_info *inf,
             printf("%s+%#lx-.\t@%#lx REL", sname, cur_data, cur_data);
 	  } else if (!strcmp(q->howto->name, "R_ARM_ABS32")) {
             printf("%s+%#lx\t@%#lx ABS", sname, cur_data, cur_data);
+	  } else if (!strcmp(q->howto->name, "R_ARM_MOVW_ABS_NC")) {
+	    objdump_print_symname (aux->abfd, inf, *q->sym_ptr_ptr);
+	  } else if (!strcmp(q->howto->name, "R_ARM_MOVT_ABS")) {
+	    objdump_print_symname (aux->abfd, inf, *q->sym_ptr_ptr);
 	  } else
 	  if (dump_reloc_info || dump_dynamic_reloc_info)
 	    {
