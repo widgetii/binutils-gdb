@@ -1403,6 +1403,7 @@ objdump_print_addr_with_sym (bfd *abfd, asection *sec, asymbol *sym,
 
   if (sym == NULL)
     {
+#if 0
       bfd_vma secaddr;
 
       (*inf->fprintf_func) (inf->stream, "<%s",
@@ -1419,15 +1420,14 @@ objdump_print_addr_with_sym (bfd *abfd, asection *sec, asymbol *sym,
 	  objdump_print_value (vma - secaddr, inf, true);
 	}
       (*inf->fprintf_func) (inf->stream, ">");
+#endif
     }
   else
     {
-      (*inf->fprintf_func) (inf->stream, "<");
-
-      objdump_print_symname (abfd, inf, sym);
+      //(*inf->fprintf_func) (inf->stream, "<");
 
       if (bfd_asymbol_value (sym) == vma)
-	;
+	objdump_print_symname (abfd, inf, sym);
       /* Undefined symbols in an executables and dynamic objects do not have
 	 a value associated with them, so it does not make sense to display
 	 an offset relative to them.  Normally we would not be provided with
@@ -1444,11 +1444,11 @@ objdump_print_addr_with_sym (bfd *abfd, asection *sec, asymbol *sym,
 	}
       else if (vma > bfd_asymbol_value (sym))
 	{
-	  (*inf->fprintf_func) (inf->stream, "+0x");
+	  (*inf->fprintf_func) (inf->stream, "L_");
 	  objdump_print_value (vma - bfd_asymbol_value (sym), inf, true);
 	}
 
-      (*inf->fprintf_func) (inf->stream, ">");
+      //(*inf->fprintf_func) (inf->stream, ">");
     }
 
   if (display_file_offsets)
@@ -2630,6 +2630,146 @@ print_jump_visualisation (bfd_vma addr, int max_level, char *line_buffer,
     }
 }
 
+#include <regex.h>
+
+#define MAX_ERROR_MSG 0x1000
+static int
+compile_re (regex_t *r, const char *regex_text)
+{
+  int status = regcomp (r, regex_text, REG_EXTENDED | REG_NEWLINE | REG_ICASE);
+  if (status != 0)
+    {
+      char error_message[MAX_ERROR_MSG];
+      regerror (status, r, error_message, MAX_ERROR_MSG);
+      fprintf (stderr, "Regex error compiling '%s': %s\n", regex_text,
+	       error_message);
+      return -1;
+    }
+  return 1;
+}
+
+static void
+printf_branch (char *buf)
+{
+  static regex_t regex;
+  static int reinit;
+  if (!reinit)
+    {
+      if (!compile_re (&regex, "(b\\w*\\s+)[0-9a-f]+\\s+(\\w+)"))
+	return;
+      reinit = 1;
+    }
+
+  regmatch_t matches[3];
+  if (regexec (&regex, buf, sizeof (matches) / sizeof (matches[0]),
+	       (regmatch_t *) &matches, 0)
+      == 0)
+    {
+      regoff_t op_start = matches[1].rm_so;
+      regoff_t op_end = matches[1].rm_eo;
+      buf[op_end] = 0;
+
+      regoff_t label_start = matches[2].rm_so;
+      regoff_t label_end = matches[2].rm_eo;
+      buf[label_end] = 0;
+
+      printf ("%s%s", buf + op_start, buf + label_start);
+    }
+  else
+    // fallback
+    printf ("%s", buf);
+}
+
+static void
+printf_ldr (char *buf)
+{
+  static regex_t regex;
+  static int reinit;
+  if (!reinit)
+    {
+      if (!compile_re (&regex, "(ldr\\s+r[0-9]+, )\\[.+\\].+(L_[0-9a-f]+)"))
+	return;
+      reinit = 1;
+    }
+
+  regmatch_t matches[3];
+  if (regexec (&regex, buf, sizeof (matches) / sizeof (matches[0]),
+	       (regmatch_t *) &matches, 0)
+      == 0)
+    {
+      regoff_t op_start = matches[1].rm_so;
+      regoff_t op_end = matches[1].rm_eo;
+      buf[op_end] = 0;
+
+      regoff_t label_start = matches[2].rm_so;
+      //regoff_t label_end = matches[2].rm_eo;
+      //buf[label_end] = 0;
+
+      printf ("%s%s", buf + op_start, buf + label_start);
+      // if R_ARM_REL32 is supported
+      printf("\nRE%s:", buf + label_start);
+    }
+  else
+    // fallback
+    printf ("%s", buf);
+}
+
+static unsigned long cur_data;
+
+static void
+printf_word (char *buf)
+{
+  static regex_t regex;
+  static int reinit;
+  if (!reinit)
+    {
+      if (!compile_re (&regex, "(.word)\\s+(.+)"))
+	return;
+      reinit = 1;
+    }
+
+  regmatch_t matches[3];
+  if (regexec (&regex, buf, sizeof (matches) / sizeof (matches[0]),
+	       (regmatch_t *) &matches, 0)
+      == 0)
+    {
+      regoff_t op_start = matches[1].rm_so;
+      regoff_t op_end = matches[1].rm_eo;
+      buf[op_end] = 0;
+
+      regoff_t data_start = matches[2].rm_so;
+      regoff_t data_end = matches[2].rm_eo;
+      buf[data_end] = 0;
+
+      printf ("%s\t", buf + op_start);
+      cur_data = strtoul(buf + data_start, NULL, 16);
+    }
+  else
+    // fallback
+    printf ("Match error");
+}
+
+static void
+printf_to_asm (char *buf)
+{
+  if (!strncmp (buf, "b", 1))
+    printf_branch (buf);
+  else if (!strncmp (buf, "ldr", 3))
+    printf_ldr(buf);
+  else if (!strncmp(buf, ".word", 5))
+    printf_word(buf);
+  else
+    {
+      char *comment = strchr (buf, ';');
+      if (comment)
+	{
+	  *comment = '@';
+	}
+      printf ("%s", buf);
+    }
+}
+
+
 /* Disassemble some data in memory between given values.  */
 
 static void
@@ -2777,10 +2917,12 @@ disassemble_bytes (struct disassemble_info *inf,
 
 	      bfd_sprintf_vma (aux->abfd, buf, section->vma + addr_offset);
 	      for (s = buf + skip_addr_chars; *s == '0'; s++)
-		*s = ' ';
+		;
 	      if (*s == '\0')
 		*--s = '0';
-	      printf ("%s:\t", buf + skip_addr_chars);
+	      char addr[20];
+	      snprintf(addr, sizeof(addr), "L_%s", s);
+	      printf ("%8s:\t", addr);
 	    }
 	  else
 	    {
@@ -2966,7 +3108,7 @@ disassemble_bytes (struct disassemble_info *inf,
 	  if (! insns)
 	    printf ("%s", buf);
 	  else if (sfile.pos)
-	    printf ("%s", sfile.buffer);
+            printf_to_asm(sfile.buffer);
 
 	  if (prefix_addresses
 	      ? show_raw_insn > 0
@@ -3031,23 +3173,33 @@ disassemble_bytes (struct disassemble_info *inf,
       while ((*relppp) < relppend
 	     && (**relppp)->address < rel_offset + addr_offset + octets / opb)
 	{
+	  arelent *q;
+
+	  q = **relppp;
+
+	  asection* sec = bfd_asymbol_section (*q->sym_ptr_ptr);
+	  const char* sname = bfd_section_name (sec);
+
+	  if (!strcmp(q->howto->name, "R_ARM_REL32")) {
+            printf("%s+%#lx-.\t@%#lx REL", sname, cur_data, cur_data);
+	  } else if (!strcmp(q->howto->name, "R_ARM_ABS32")) {
+            printf("%s+%#lx\t@%#lx ABS", sname, cur_data, cur_data);
+	  } else
 	  if (dump_reloc_info || dump_dynamic_reloc_info)
 	    {
-	      arelent *q;
-
-	      q = **relppp;
-
 	      if (wide_output)
-		putchar ('\t');
+		printf ("\t@");
 	      else
-		printf ("\t\t\t");
+		printf ("\t\t\t@");
 
+#if 0
 	      if (!no_addresses)
 		{
 		  objdump_print_value (section->vma - rel_offset + q->address,
 				       inf, true);
 		  printf (": ");
 		}
+#endif
 
 	      if (q->howto == NULL)
 		printf ("*unknown*\t");
@@ -3233,7 +3385,7 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
 	 && (*rel_pp)->address < rel_offset + addr_offset)
     ++rel_pp;
 
-  printf (_("\nDisassembly of section %s:\n"), sanitize_string (section->name));
+  printf (_("\n\t%s\n"), sanitize_string (section->name));
 
   /* Find the nearest symbol forwards from our current position.  */
   paux->require_sec = true;
@@ -3366,10 +3518,14 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
 
       if (! prefix_addresses && do_print)
 	{
-	  pinfo->fprintf_func (pinfo->stream, "\n");
-	  objdump_print_addr_with_sym (abfd, section, sym, addr,
-				       pinfo, false);
-	  pinfo->fprintf_func (pinfo->stream, ":\n");
+	  pinfo->fprintf_func (pinfo->stream, "\n@ %lx\n", addr);
+	  if (sym->flags & BSF_GLOBAL)
+	    pinfo->fprintf_func (pinfo->stream, "\t.global %s\n", bfd_asymbol_name (sym));
+	  if (sym->flags & BSF_FUNCTION)
+	    pinfo->fprintf_func (pinfo->stream, "\t.type\t%s, %%function\n", bfd_asymbol_name (sym));
+	  //objdump_print_addr_with_sym (abfd, section, sym, addr,
+				       //pinfo, false);
+	  pinfo->fprintf_func (pinfo->stream, "%s:\n", bfd_asymbol_name (sym));
 	}
 
       if (sym != NULL && bfd_asymbol_value (sym) > addr)
@@ -4351,10 +4507,25 @@ dump_section (bfd *abfd, asection *section, void *dummy ATTRIBUTE_UNUSED)
   bfd_vma stop_offset;
   unsigned int opb = bfd_octets_per_byte (abfd, section);
   /* Bytes per line.  */
-  const int onaline = 16;
+  const int onaline = 1;
   char buf[64];
   int count;
   int width;
+
+  if (!strcmp(section->name, ".text")||!(strcmp(section->name, ".ARM.attributes")))
+    return;
+
+  if (!strcmp(section->name, ".bss")) {
+    size_t size = section->size;
+    if (!size)
+      return;
+
+    printf("\t.bss\n");
+    if (section->alignment_power > 0)
+      printf("\t.align %d\n", 2 << (section->alignment_power-1));
+    printf("\t.skip %ld", size);
+    puts("\n");
+  }
 
   if (! process_section_p (section))
     return;
@@ -4388,11 +4559,13 @@ dump_section (bfd *abfd, asection *section, void *dummy ATTRIBUTE_UNUSED)
   if (start_offset >= stop_offset)
     return;
 
-  printf (_("Contents of section %s:"), sanitize_string (section->name));
+  printf ("\t.section\t%s", sanitize_string (section->name));
   if (display_file_offsets)
     printf (_("  (Starting at file offset: 0x%lx)"),
 	    (unsigned long) (section->filepos + start_offset));
   printf ("\n");
+  if (section->alignment_power > 0)
+    printf("\t.align %d\n", 2 << (section->alignment_power-1));
 
   if (!bfd_get_full_section_contents (abfd, section, &data))
     {
@@ -4435,6 +4608,7 @@ dump_section (bfd *abfd, asection *section, void *dummy ATTRIBUTE_UNUSED)
       if ((size_t) count >= sizeof (buf))
 	abort ();
 
+#if 0
       putchar (' ');
       while (count < width)
 	{
@@ -4443,16 +4617,19 @@ dump_section (bfd *abfd, asection *section, void *dummy ATTRIBUTE_UNUSED)
 	}
       fputs (buf + count - width, stdout);
       putchar (' ');
+#endif
 
       for (j = addr_offset * opb;
 	   j < addr_offset * opb + onaline; j++)
 	{
 	  if (j < stop_offset * opb)
-	    printf ("%02x", (unsigned) (data[j]));
+	    printf (".byte %#02x", (unsigned) (data[j]));
 	  else
 	    printf ("  ");
+#if 0
 	  if ((j & 3) == 3)
 	    printf (" ");
+#endif
 	}
 
       printf (" ");
@@ -4462,7 +4639,7 @@ dump_section (bfd *abfd, asection *section, void *dummy ATTRIBUTE_UNUSED)
 	  if (j >= stop_offset * opb)
 	    printf (" ");
 	  else
-	    printf ("%c", ISPRINT (data[j]) ? data[j] : '.');
+	    printf ("@ %c", ISPRINT (data[j]) ? data[j] : '.');
 	}
       putchar ('\n');
     }
@@ -4916,7 +5093,7 @@ dump_bfd (bfd *abfd, bool is_mainfile)
     return;
 
   if (! dump_debugging_tags && ! suppress_bfd_header)
-    printf (_("\n%s:     file format %s\n"),
+    printf (_("\n@%s:     file format %s\n"),
 	    sanitize_string (bfd_get_filename (abfd)),
 	    abfd->xvec->name);
   if (dump_ar_hdrs)
