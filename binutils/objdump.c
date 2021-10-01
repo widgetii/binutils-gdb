@@ -5570,6 +5570,9 @@ main (int argc, char **argv)
 	case 'd':
 	  disassemble = true;
 	  seenflag = true;
+	  wide_output = true;
+	  dump_reloc_info = true;
+	  show_raw_insn = -1;
 	  disasm_sym = optarg;
 	  break;
 	case 'z':
