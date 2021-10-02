@@ -4595,6 +4595,20 @@ enum_section_symbols (bfd *abfd, asection *section)
   free(symbol_table);
 }
 
+static void
+print_start_section_label(asection *section, const char* suffix)
+{
+  printf("start_");
+  for (size_t i = 0; i < strlen(section->name); i++) {
+    if (section->name[i] == '.' || section->name[i] == '-')
+      printf("_");
+    else
+      printf("%c", section->name[i]);
+  }
+  if (suffix)
+    printf("%s", suffix);
+}
+
 /* Display a section in hexadecimal format with associated characters.
    Each line prefixed by the zero padded address.  */
 
@@ -4669,6 +4683,7 @@ dump_section (bfd *abfd, asection *section, void *dummy ATTRIBUTE_UNUSED)
     printf("\t.align %d\n", 2 << (section->alignment_power-1));
 
   enum_section_symbols(abfd, section);
+  print_start_section_label(section, ":\n");
   if (!bfd_get_full_section_contents (abfd, section, &data))
     {
       non_fatal (_("Reading section %s failed because: %s"),
@@ -4745,6 +4760,10 @@ dump_section (bfd *abfd, asection *section, void *dummy ATTRIBUTE_UNUSED)
 	}
       putchar ('\n');
     }
+  printf(".if %ld != .-", section->size);
+  print_start_section_label(section, "\n");
+  printf(".abort\n");
+  printf(".endif\n");
   printf("\n\n");
   free (data);
 }
