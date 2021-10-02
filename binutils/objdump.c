@@ -2692,7 +2692,7 @@ printf_ldr (char *buf)
   static int reinit;
   if (!reinit)
     {
-      if (!compile_re (&regex, "(ldr\\s+r[0-9]+, )\\[.+\\].+(L_[0-9a-f]+)"))
+      if (!compile_re (&regex, "(ldr\\s+r[0-9]+, )\\[.+\\].+(\\w_[0-9a-f]+)"))
 	return;
       reinit = 1;
     }
