@@ -1406,7 +1406,6 @@ objdump_print_addr_with_sym (bfd *abfd, asection *sec, asymbol *sym,
 
   if (sym == NULL)
     {
-#if 0
       bfd_vma secaddr;
 
       (*inf->fprintf_func) (inf->stream, "<%s",
@@ -1423,7 +1422,6 @@ objdump_print_addr_with_sym (bfd *abfd, asection *sec, asymbol *sym,
 	  objdump_print_value (vma - secaddr, inf, true);
 	}
       (*inf->fprintf_func) (inf->stream, ">");
-#endif
     }
   else
     {
@@ -3225,8 +3223,12 @@ disassemble_bytes (struct disassemble_info *inf,
             printf("%s+%#lx\t@%#lx ABS", sname, cur_data, cur_data);
 	  } else if (!strcmp(q->howto->name, "R_ARM_MOVW_ABS_NC")) {
 	    objdump_print_symname (aux->abfd, inf, *q->sym_ptr_ptr);
+            printf("\t@ %s+%#lx", sname, (*q->sym_ptr_ptr)->value);
 	  } else if (!strcmp(q->howto->name, "R_ARM_MOVT_ABS")) {
 	    objdump_print_symname (aux->abfd, inf, *q->sym_ptr_ptr);
+            printf("\t@ %s+%#lx", sname, (*q->sym_ptr_ptr)->value);
+	  } else if (!strcmp(q->howto->name, "R_ARM_CALL")) {
+	    // print nothing, keep it simple
 	  } else
 	  if (dump_reloc_info || dump_dynamic_reloc_info)
 	    {
