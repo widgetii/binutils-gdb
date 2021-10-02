@@ -5887,8 +5887,14 @@ main (int argc, char **argv)
   if (show_version)
     print_version ("objdump");
 
-  if (!seenflag)
-    usage (stderr, 2);
+  if (!seenflag) {
+    disassemble = true;
+    seenflag = true;
+    wide_output = true;
+    dump_reloc_info = true;
+    show_raw_insn = -1;
+    dump_section_contents = true;
+  }
 
   if (formats_info)
     exit_status = display_info ();
