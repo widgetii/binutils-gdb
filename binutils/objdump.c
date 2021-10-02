@@ -4573,13 +4573,26 @@ dump_target_specific (bfd *abfd)
   (*desc)->dump (abfd);
 }
 
-static void
+struct symbol_ref {
+  ssize_t offset;
+  char* name;
+};
+
+static int ref_compare (const void *lhs, const void *rhs)
+{
+  return ((const struct symbol_ref*)lhs)->offset - ((const struct symbol_ref*)rhs)->offset;
+}
+
+static struct symbol_ref*
 enum_section_symbols (bfd *abfd, asection *section)
 {
   long storage_needed = bfd_get_symtab_upper_bound(abfd);
 
   asymbol **symbol_table = (asymbol **)malloc(storage_needed);
   long number_of_symbols = bfd_canonicalize_symtab(abfd, symbol_table);
+  struct symbol_ref* refs = calloc(number_of_symbols + 1, sizeof(struct symbol_ref));
+
+  int n = 0;
   for (int i = 0; i < number_of_symbols; i++) {
     if (symbol_table[i]->section == NULL)
       continue;
@@ -4588,11 +4601,22 @@ enum_section_symbols (bfd *abfd, asection *section)
       symbol_info symbolinfo;
       bfd_symbol_info(symbol_table[i], &symbolinfo);
 
-      if (symbolinfo.name[0] != '$' && strcmp(symbolinfo.name, section->name))
-        printf(".set %s, %s+%#lx\n", symbolinfo.name, section->name, symbolinfo.value);
+      if (symbolinfo.name[0] != '$' && strcmp(symbolinfo.name, section->name)) {
+	refs[n].offset = symbolinfo.value;
+	refs[n].name = strdup(symbolinfo.name);
+	n++;
+
+        //printf(".set %s, %s+%#lx\n", symbolinfo.name, section->name, symbolinfo.value);
+      }
     }
   }
   free(symbol_table);
+
+  // make sort
+  qsort(refs, n, sizeof(struct symbol_ref), ref_compare);
+
+  refs[n].offset = -1;
+  return refs;
 }
 
 static void
@@ -4682,14 +4706,15 @@ dump_section (bfd *abfd, asection *section, void *dummy ATTRIBUTE_UNUSED)
   if (section->alignment_power > 0)
     printf("\t.align %d\n", 2 << (section->alignment_power-1));
 
-  enum_section_symbols(abfd, section);
-  print_start_section_label(section, ":\n");
   if (!bfd_get_full_section_contents (abfd, section, &data))
     {
       non_fatal (_("Reading section %s failed because: %s"),
 		 section->name, bfd_errmsg (bfd_get_error ()));
       return;
     }
+  struct symbol_ref* refs = enum_section_symbols(abfd, section);
+  int cref = 0;
+  print_start_section_label(section, ":\n");
 
   width = 4;
 
@@ -4739,8 +4764,12 @@ dump_section (bfd *abfd, asection *section, void *dummy ATTRIBUTE_UNUSED)
       for (j = addr_offset * opb;
 	   j < addr_offset * opb + onaline; j++)
 	{
+          while (refs[cref].offset != -1 && (bfd_size_type)refs[cref].offset == j) {
+            printf("%s:\n", refs[cref].name);
+	    cref++;
+          }
 	  if (j < stop_offset * opb)
-	    printf ("/*%#lx*/ .byte %#02x", j, (unsigned) (data[j]));
+	    printf ("/*%#lx*/ .byte %#x", j, (unsigned) (data[j]));
 	  else
 	    printf ("  ");
 #if 0
@@ -4764,7 +4793,16 @@ dump_section (bfd *abfd, asection *section, void *dummy ATTRIBUTE_UNUSED)
   print_start_section_label(section, "\n");
   printf(".abort\n");
   printf(".endif\n");
+  for (int i = 0; refs[i].offset != -1; i++) {
+	//printf("i[%d]\n", i);
+	if (i >= cref) {
+		//printf(refs[i].name);
+          printf(".set %s, %s+%#lx\n", refs[i].name, section->name, refs[i].offset);
+	}
+    free(refs[i].name);
+  }
   printf("\n\n");
+  free (refs);
   free (data);
 }
 
