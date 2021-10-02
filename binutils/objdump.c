@@ -4740,6 +4740,10 @@ dump_section (bfd *abfd, asection *section, void *dummy ATTRIBUTE_UNUSED)
   if (count > width)
     width = count;
 
+  unsigned long ascii_start = 0;
+  char ascii_str[1024] = {0};
+  size_t ascii_len = 0;
+
   for (addr_offset = start_offset;
        addr_offset < stop_offset; addr_offset += onaline / opb)
     {
@@ -4765,19 +4769,44 @@ dump_section (bfd *abfd, asection *section, void *dummy ATTRIBUTE_UNUSED)
 	   j < addr_offset * opb + onaline; j++)
 	{
           while (refs[cref].offset != -1 && (bfd_size_type)refs[cref].offset == j) {
+            if (ascii_len) {
+              printf("/*%#lx*/ .ascii \"%s\"\n", ascii_start, ascii_str);
+              memset(ascii_str, 0, sizeof(ascii_str));
+	      ascii_len = 0;
+            }
             printf("%s:\n", refs[cref].name);
 	    cref++;
           }
-	  if (j < stop_offset * opb)
-	    printf ("/*%#lx*/ .byte %#x", j, (unsigned) (data[j]));
-	  else
-	    printf ("  ");
-#if 0
-	  if ((j & 3) == 3)
-	    printf (" ");
-#endif
-	}
+	  if ((data[j] >= 0x20 && data[j] <= 0x7e) || data[j] == '\n' || data[j] == '\t') {
+	    if (!ascii_len) ascii_start = j;
 
+	    if (ascii_len+2 == sizeof(ascii_str)) abort();
+	    if (data[j] < 0x20 || data[j] == '"') {
+              ascii_str[ascii_len++] = '\\';
+	    }
+	    switch (data[j]) {
+            case '\t':
+              ascii_str[ascii_len++] = 't';
+	      break;
+            case '\n':
+              ascii_str[ascii_len++] = 'n';
+	      break;
+            default:
+	      ascii_str[ascii_len++] = data[j];
+	    }
+	  } else if (data[j] == 0 && ascii_len) {
+	    printf("/*%#lx*/ .asciz \"%s\"\n", ascii_start, ascii_str);
+	    memset(ascii_str, 0, sizeof(ascii_str));
+	    ascii_len = 0;
+	  } else if (ascii_len) {
+	    printf("/*%#lx*/ .ascii \"%s\"\n", ascii_start, ascii_str);
+	    memset(ascii_str, 0, sizeof(ascii_str));
+	    ascii_len = 0;
+	    printf ("/*%#lx*/ .byte %#x @ %c\n", j, (unsigned) (data[j]), ISPRINT (data[j]) ? data[j] : '.');
+	  } else
+	  printf ("/*%#lx*/ .byte %#x @ %c\n", j, (unsigned) (data[j]), ISPRINT (data[j]) ? data[j] : '.');
+	}
+#if 0
       printf (" ");
       for (j = addr_offset * opb;
 	   j < addr_offset * opb + onaline; j++)
@@ -4788,7 +4817,11 @@ dump_section (bfd *abfd, asection *section, void *dummy ATTRIBUTE_UNUSED)
 	    printf ("@ %c", ISPRINT (data[j]) ? data[j] : '.');
 	}
       putchar ('\n');
+#endif
     }
+  if (ascii_len) {
+    printf("/*%#lx*/ .ascii \"%s\"\n", ascii_start, ascii_str);
+  }
   printf(".if %ld != .-", section->size);
   print_start_section_label(section, "\n");
   printf(".abort\n");
