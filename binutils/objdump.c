@@ -4611,8 +4611,8 @@ dump_section (bfd *abfd, asection *section, void *dummy ATTRIBUTE_UNUSED)
   int count;
   int width;
 
-  if (!strcmp(section->name, ".text")||!(strcmp(section->name, ".ARM.attributes")))
-    return;
+  if (!strcmp(section->name + strlen(section->name) - 5, ".text")||!(strcmp(section->name, ".ARM.attributes")))
+	return;
 
   if (!strcmp(section->name, ".bss")) {
     size_t size = section->size;
@@ -4743,6 +4743,7 @@ dump_section (bfd *abfd, asection *section, void *dummy ATTRIBUTE_UNUSED)
 	}
       putchar ('\n');
     }
+  printf("\n\n");
   free (data);
 }
 
