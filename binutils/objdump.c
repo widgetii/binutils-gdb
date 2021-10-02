@@ -4570,7 +4570,29 @@ dump_target_specific (bfd *abfd)
   /* Dump.  */
   (*desc)->dump (abfd);
 }
-
+
+static void
+enum_section_symbols (bfd *abfd, asection *section)
+{
+  long storage_needed = bfd_get_symtab_upper_bound(abfd);
+
+  asymbol **symbol_table = (asymbol **)malloc(storage_needed);
+  long number_of_symbols = bfd_canonicalize_symtab(abfd, symbol_table);
+  for (int i = 0; i < number_of_symbols; i++) {
+    if (symbol_table[i]->section == NULL)
+      continue;
+
+    if (!strcmp(symbol_table[i]->section->name, section->name)) {
+      symbol_info symbolinfo;
+      bfd_symbol_info(symbol_table[i], &symbolinfo);
+
+      if (symbolinfo.name[0] != '$' && strcmp(symbolinfo.name, section->name))
+        printf(".set %s, %s+%#lx\n", symbolinfo.name, section->name, symbolinfo.value);
+    }
+  }
+  free(symbol_table);
+}
+
 /* Display a section in hexadecimal format with associated characters.
    Each line prefixed by the zero padded address.  */
 
@@ -4644,6 +4666,7 @@ dump_section (bfd *abfd, asection *section, void *dummy ATTRIBUTE_UNUSED)
   if (section->alignment_power > 0)
     printf("\t.align %d\n", 2 << (section->alignment_power-1));
 
+  enum_section_symbols(abfd, section);
   if (!bfd_get_full_section_contents (abfd, section, &data))
     {
       non_fatal (_("Reading section %s failed because: %s"),
@@ -4700,7 +4723,7 @@ dump_section (bfd *abfd, asection *section, void *dummy ATTRIBUTE_UNUSED)
 	   j < addr_offset * opb + onaline; j++)
 	{
 	  if (j < stop_offset * opb)
-	    printf (".byte %#02x", (unsigned) (data[j]));
+	    printf ("/*%#lx*/ .byte %#02x", j, (unsigned) (data[j]));
 	  else
 	    printf ("  ");
 #if 0
