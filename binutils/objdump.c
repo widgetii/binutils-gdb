@@ -134,6 +134,7 @@ static int demangle_flags = DMGL_ANSI | DMGL_PARAMS;
 
 static unsigned long cur_data;
 static unsigned long cur_offset;
+static char label_pr = 'L';
 
 /* A structure to record the sections mentioned in -j switches.  */
 struct only
@@ -1445,7 +1446,9 @@ objdump_print_addr_with_sym (bfd *abfd, asection *sec, asymbol *sym,
 	}
       else if (vma > bfd_asymbol_value (sym))
 	{
-	  (*inf->fprintf_func) (inf->stream, "L_");
+	  char buf[255] = {0};
+	  sprintf(buf, "%c_", label_pr);
+	  (*inf->fprintf_func) (inf->stream, buf);
 
 	  objdump_print_value (vma - bfd_asymbol_value (sym) + cur_offset, inf, true);
 	}
@@ -2958,7 +2961,7 @@ disassemble_bytes (struct disassemble_info *inf,
 	      if (*s == '\0')
 		*--s = '0';
 	      char addr[20];
-	      snprintf(addr, sizeof(addr), "L_%s", s);
+	      snprintf(addr, sizeof(addr), "%c_%s", label_pr, s);
 	      printf ("%8s:\t", addr);
 	    }
 	  else
@@ -3430,7 +3433,34 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
 	 && (*rel_pp)->address < rel_offset + addr_offset)
     ++rel_pp;
 
-  printf (_("\n\t%s\n"), sanitize_string (section->name));
+  const char* sname = sanitize_string (section->name);
+  if (!strcmp(sname, ".text"))
+	label_pr = 'L';
+  else if (!strcmp(sname, ".init.text"))
+	label_pr = 'I';
+  else if (!strcmp(sname, ".exit.text"))
+	label_pr = 'E';
+  else
+	label_pr = 'U';
+
+  if (!strcmp(sname, ".text")) {
+	printf("\t\t.text\n");
+  } else {
+	printf (_("\n\t.section %s"), sname);
+	if (section->flags) {
+		//  https://sourceware.org/binutils/docs/as/Section.html#Section
+		char flags[255] = {0};
+		if (section->flags & SEC_ALLOC) {
+			strcat(flags, "a");
+		}
+		if (section->flags & SEC_CODE) {
+			strcat(flags, "x");
+		}
+		if (strlen(flags))
+			printf(", \"%s\"", flags);
+	}
+	printf("\n");
+  }
 
   /* Find the nearest symbol forwards from our current position.  */
   paux->require_sec = true;
