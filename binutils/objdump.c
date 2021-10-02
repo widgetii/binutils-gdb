@@ -3689,6 +3689,8 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
 			     addr_offset, nextstop_offset,
 			     rel_offset, &rel_pp, rel_ppend);
 
+	  printf(".size\t%s,.-%s\n", bfd_asymbol_name (sym), bfd_asymbol_name (sym));
+
 	  /* Free jumps.  */
 	  while (detected_jumps)
 	    {
