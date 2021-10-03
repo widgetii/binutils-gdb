@@ -4633,6 +4633,13 @@ print_start_section_label(asection *section, const char* suffix)
     printf("%s", suffix);
 }
 
+typedef struct {
+  uint32_t namesz;
+  uint32_t descsz;
+  uint32_t type;
+  uint8_t data[];
+} ElfNoteSection_t;
+
 /* Display a section in hexadecimal format with associated characters.
    Each line prefixed by the zero padded address.  */
 
@@ -4716,6 +4723,24 @@ dump_section (bfd *abfd, asection *section, void *dummy ATTRIBUTE_UNUSED)
   int cref = 0;
   print_start_section_label(section, ":\n");
 
+  bool dumped = false;
+  if (!(strcmp(section->name, ".note.gnu.build-id")))
+  {
+        ElfNoteSection_t* note = (ElfNoteSection_t*)data;
+
+	printf("\t.word %#x\t@ namesz\n", note->namesz);
+	printf("\t.word %#x\t@ descsz\n", note->descsz);
+	printf("\t.word %#x\t@ type\n", note->type);
+
+	size_t off = offsetof(ElfNoteSection_t, data);
+	printf("\t.asciz \"%s\"\n", (char*)data + off);
+	for (size_t i = off + note->namesz; i < bfd_section_size (section); i++)
+	{
+	  printf("\t.byte %#x\n", data[i]);
+	}
+	dumped = true;
+  }
+
   width = 4;
 
   bfd_sprintf_vma (abfd, buf, start_offset + section->vma);
@@ -4744,6 +4769,7 @@ dump_section (bfd *abfd, asection *section, void *dummy ATTRIBUTE_UNUSED)
   char ascii_str[1024] = {0};
   size_t ascii_len = 0;
 
+  if (!dumped)
   for (addr_offset = start_offset;
        addr_offset < stop_offset; addr_offset += onaline / opb)
     {
