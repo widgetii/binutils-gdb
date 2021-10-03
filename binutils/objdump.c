@@ -1453,7 +1453,7 @@ objdump_print_addr_with_sym (bfd *abfd, asection *sec, asymbol *sym,
     }
 
   if (display_file_offsets)
-    inf->fprintf_func (inf->stream, _(" (File Offset: 0x%lx)"),
+    inf->fprintf_func (inf->stream, _(" /* File Offset: 0x%lx */"),
 			(long int)(sec->filepos + (vma - sec->vma)));
 }
 
@@ -1480,7 +1480,7 @@ objdump_print_addr (bfd_vma vma,
 	}
 
       if (display_file_offsets)
-	inf->fprintf_func (inf->stream, _(" (File Offset: 0x%lx)"),
+	inf->fprintf_func (inf->stream, _("@ File Offset: 0x%lx"),
 			   (long int) (inf->section->filepos
 				       + (vma - inf->section->vma)));
       return;
@@ -3303,6 +3303,39 @@ disassemble_bytes (struct disassemble_info *inf,
 }
 
 static void
+print_section_name (asection* section) {
+  const char* sname = sanitize_string (section->name);
+  if (!strcmp(sname, ".text")) {
+      printf("\t\t.text\n");
+  } else {
+      printf (_("\n\t.section %s"), sname);
+      if (strcmp(section->name, ".data") && strcmp(section->name, ".comment")) {
+          if (section->flags) {
+              //  https://sourceware.org/binutils/docs/as/Section.html#Section
+              char flags[255] = {0};
+              int entsize = 0;
+              if (section->flags & SEC_ALLOC)
+                strcat(flags, "a");
+              if (!(section->flags & SEC_READONLY))
+                strcat(flags, "w");
+              if (section->flags & SEC_CODE)
+                strcat(flags, "x");
+              if (section->flags & SEC_MERGE) {
+                  strcat(flags, "M");
+                  entsize = 1;
+              }
+              if (section->flags & SEC_STRINGS)
+                strcat(flags, "S");
+              if (strlen(flags))
+                printf(", \"%s\"%s", flags, entsize ? ", 1": "");
+          }
+          printf(" @ flags %#X", section->flags);
+      }
+      printf("\n");
+  }
+}
+
+static void
 disassemble_section (bfd *abfd, asection *section, void *inf)
 {
   const struct elf_backend_data *bed;
@@ -3438,23 +3471,7 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
   else
     label_pr = 'U';
 
-  if (!strcmp(sname, ".text")) {
-      printf("\t\t.text\n");
-  } else {
-      // TODO: extract to routine
-      printf (_("\n\t.section %s"), sname);
-      if (section->flags) {
-          //  https://sourceware.org/binutils/docs/as/Section.html#Section
-          char flags[255] = {0};
-          if (section->flags & SEC_ALLOC)
-              strcat(flags, "a");
-          if (section->flags & SEC_CODE)
-              strcat(flags, "x");
-          if (strlen(flags))
-            printf(", \"%s\"", flags);
-      }
-      printf("@ flags %#X\n", section->flags);
-  }
+  print_section_name (section);
 
   /* Find the nearest symbol forwards from our current position.  */
   paux->require_sec = true;
@@ -4697,11 +4714,10 @@ dump_section (bfd *abfd, asection *section, void *dummy ATTRIBUTE_UNUSED)
   if (start_offset >= stop_offset)
     return;
 
-  printf ("\t.section\t%s", sanitize_string (section->name));
+  print_section_name (section);
   if (display_file_offsets)
-    printf (_("  (Starting at file offset: 0x%lx)"),
+    printf (_("@ Starting at file offset: 0x%lx\n"),
 	    (unsigned long) (section->filepos + start_offset));
-  printf ("\n");
   if (section->alignment_power > 0)
     printf("\t.align %d\n", section->alignment_power);
 
