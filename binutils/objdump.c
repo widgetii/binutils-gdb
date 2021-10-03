@@ -1426,8 +1426,6 @@ objdump_print_addr_with_sym (bfd *abfd, asection *sec, asymbol *sym,
     }
   else
     {
-      //(*inf->fprintf_func) (inf->stream, "<");
-
       if (bfd_asymbol_value (sym) == vma)
 	objdump_print_symname (abfd, inf, sym);
       /* Undefined symbols in an executables and dynamic objects do not have
@@ -1452,8 +1450,6 @@ objdump_print_addr_with_sym (bfd *abfd, asection *sec, asymbol *sym,
 
 	  objdump_print_value (vma - bfd_asymbol_value (sym) + cur_offset, inf, true);
 	}
-
-      //(*inf->fprintf_func) (inf->stream, ">");
     }
 
   if (display_file_offsets)
@@ -2647,7 +2643,7 @@ compile_re (regex_t *r, const char *regex_text)
       char error_message[MAX_ERROR_MSG];
       regerror (status, r, error_message, MAX_ERROR_MSG);
       fprintf (stderr, "Regex error compiling '%s': %s\n", regex_text,
-	       error_message);
+               error_message);
       return -1;
     }
   return 1;
@@ -2661,13 +2657,13 @@ printf_branch (char *buf)
   if (!reinit)
     {
       if (!compile_re (&regex, "(b\\w*\\s+)[0-9a-f]+\\s+(\\w+)"))
-	return;
+        return;
       reinit = 1;
     }
 
   regmatch_t matches[3];
   if (regexec (&regex, buf, sizeof (matches) / sizeof (matches[0]),
-	       (regmatch_t *) &matches, 0)
+               (regmatch_t *) &matches, 0)
       == 0)
     {
       regoff_t op_start = matches[1].rm_so;
@@ -2693,13 +2689,13 @@ printf_ldr (char *buf)
   if (!reinit)
     {
       if (!compile_re (&regex, "(ldr\\s+r[0-9]+, )\\[.+\\].+(\\w_[0-9a-f]+)"))
-	return;
+        return;
       reinit = 1;
     }
 
   regmatch_t matches[3];
   if (regexec (&regex, buf, sizeof (matches) / sizeof (matches[0]),
-	       (regmatch_t *) &matches, 0)
+               (regmatch_t *) &matches, 0)
       == 0)
     {
       regoff_t op_start = matches[1].rm_so;
@@ -2727,13 +2723,13 @@ printf_word (char *buf)
   if (!reinit)
     {
       if (!compile_re (&regex, "(.word)\\s+(.+)"))
-	return;
+        return;
       reinit = 1;
     }
 
   regmatch_t matches[3];
   if (regexec (&regex, buf, sizeof (matches) / sizeof (matches[0]),
-	       (regmatch_t *) &matches, 0)
+               (regmatch_t *) &matches, 0)
       == 0)
     {
       regoff_t op_start = matches[1].rm_so;
@@ -2754,61 +2750,60 @@ printf_word (char *buf)
 
 static void
 printf_movx(char* buf) {
-  static regex_t regex;
-  static int reinit;
-  if (!reinit)
-    {
-      if (!compile_re (&regex, "(mov[wt])\\s+(.+), #0"))
-	return;
-      reinit = 1;
-    }
-
-  regmatch_t matches[3];
-  if (regexec (&regex, buf, sizeof (matches) / sizeof (matches[0]),
-	       (regmatch_t *) &matches, 0)
-      == 0)
-    {
-      regoff_t op_start = matches[1].rm_so;
-      regoff_t op_end = matches[1].rm_eo;
-      buf[op_end] = 0;
-
-      regoff_t data_start = matches[2].rm_so;
-      regoff_t data_end = matches[2].rm_eo;
-      buf[data_end] = 0;
-
-      printf ("%s\t%s, ", buf + op_start, buf + data_start);
-      if (buf[op_start+3] == 'w') {
-        printf("#:lower16:");
-      } else if (buf[op_start+3] == 't') {
-        printf("#:upper16:");
+    static regex_t regex;
+    static int reinit;
+    if (!reinit)
+      {
+        if (!compile_re (&regex, "(mov[wt])\\s+(.+), #0"))
+          return;
+        reinit = 1;
       }
-    }
-  else
-    // fallback
-    printf ("%s", buf);
+
+    regmatch_t matches[3];
+    if (regexec (&regex, buf, sizeof (matches) / sizeof (matches[0]),
+                 (regmatch_t *) &matches, 0)
+        == 0)
+      {
+        regoff_t op_start = matches[1].rm_so;
+        regoff_t op_end = matches[1].rm_eo;
+        buf[op_end] = 0;
+
+        regoff_t data_start = matches[2].rm_so;
+        regoff_t data_end = matches[2].rm_eo;
+        buf[data_end] = 0;
+
+        printf ("%s\t%s, ", buf + op_start, buf + data_start);
+        if (buf[op_start+3] == 'w') {
+            printf("#:lower16:");
+        } else if (buf[op_start+3] == 't') {
+            printf("#:upper16:");
+        }
+      }
+    else
+      // fallback
+      printf ("%s", buf);
 }
 
 static void
 printf_to_asm (char *buf)
 {
-	char *comment = strchr (buf, ';');
-	if (comment)
-		*comment = '@';
+  char *comment = strchr (buf, ';');
+  if (comment)
+    *comment = '@';
 
-	if (!strncmp (buf, "b", 1))
-		printf_branch (buf);
-	else if (!strncmp (buf, "ldr", 3))
-		printf_ldr(buf);
-	else if (!strncmp (buf, "movw\t", 5) || !strncmp (buf, "movt\t", 5))
-		printf_movx(buf);
-	else if (!strncmp(buf, ".word", 5))
-		printf_word(buf);
-	else
-	{
-		printf ("%s", buf);
-	}
+  if (!strncmp (buf, "b", 1))
+    printf_branch (buf);
+  else if (!strncmp (buf, "ldr", 3))
+    printf_ldr(buf);
+  else if (!strncmp (buf, "movw\t", 5) || !strncmp (buf, "movt\t", 5))
+    printf_movx(buf);
+  else if (!strncmp(buf, ".word", 5))
+    printf_word(buf);
+  else
+    {
+      printf ("%s", buf);
+    }
 }
-
 
 /* Disassemble some data in memory between given values.  */
 
@@ -3435,31 +3430,30 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
 
   const char* sname = sanitize_string (section->name);
   if (!strcmp(sname, ".text"))
-	label_pr = 'L';
+    label_pr = 'L';
   else if (!strcmp(sname, ".init.text"))
-	label_pr = 'I';
+    label_pr = 'I';
   else if (!strcmp(sname, ".exit.text"))
-	label_pr = 'E';
+    label_pr = 'E';
   else
-	label_pr = 'U';
+    label_pr = 'U';
 
   if (!strcmp(sname, ".text")) {
-	printf("\t\t.text\n");
+      printf("\t\t.text\n");
   } else {
-	printf (_("\n\t.section %s"), sname);
-	if (section->flags) {
-		//  https://sourceware.org/binutils/docs/as/Section.html#Section
-		char flags[255] = {0};
-		if (section->flags & SEC_ALLOC) {
-			strcat(flags, "a");
-		}
-		if (section->flags & SEC_CODE) {
-			strcat(flags, "x");
-		}
-		if (strlen(flags))
-			printf(", \"%s\"", flags);
-	}
-	printf("\n");
+      // TODO: extract to routine
+      printf (_("\n\t.section %s"), sname);
+      if (section->flags) {
+          //  https://sourceware.org/binutils/docs/as/Section.html#Section
+          char flags[255] = {0};
+          if (section->flags & SEC_ALLOC)
+              strcat(flags, "a");
+          if (section->flags & SEC_CODE)
+              strcat(flags, "x");
+          if (strlen(flags))
+            printf(", \"%s\"", flags);
+      }
+      printf("@ flags %#X\n", section->flags);
   }
 
   /* Find the nearest symbol forwards from our current position.  */
@@ -4574,8 +4568,8 @@ dump_target_specific (bfd *abfd)
 }
 
 struct symbol_ref {
-  ssize_t offset;
-  char* name;
+    ssize_t offset;
+    char* name;
 };
 
 static int ref_compare (const void *lhs, const void *rhs)
@@ -4594,21 +4588,19 @@ enum_section_symbols (bfd *abfd, asection *section)
 
   int n = 0;
   for (int i = 0; i < number_of_symbols; i++) {
-    if (symbol_table[i]->section == NULL)
-      continue;
+      if (symbol_table[i]->section == NULL)
+        continue;
 
-    if (!strcmp(symbol_table[i]->section->name, section->name)) {
-      symbol_info symbolinfo;
-      bfd_symbol_info(symbol_table[i], &symbolinfo);
+      if (!strcmp(symbol_table[i]->section->name, section->name)) {
+          symbol_info symbolinfo;
+          bfd_symbol_info(symbol_table[i], &symbolinfo);
 
-      if (symbolinfo.name[0] != '$' && strcmp(symbolinfo.name, section->name)) {
-	refs[n].offset = symbolinfo.value;
-	refs[n].name = strdup(symbolinfo.name);
-	n++;
-
-        //printf(".set %s, %s+%#lx\n", symbolinfo.name, section->name, symbolinfo.value);
+          if (symbolinfo.name[0] != '$' && strcmp(symbolinfo.name, section->name)) {
+              refs[n].offset = symbolinfo.value;
+              refs[n].name = strdup(symbolinfo.name);
+              n++;
+          }
       }
-    }
   }
   free(symbol_table);
 
@@ -4724,21 +4716,21 @@ dump_section (bfd *abfd, asection *section, void *dummy ATTRIBUTE_UNUSED)
   print_start_section_label(section, ":\n");
 
   if (!(strcmp(section->name, ".note.gnu.build-id")))
-  {
-        ElfNoteSection_t* note = (ElfNoteSection_t*)data;
+    {
+      ElfNoteSection_t* note = (ElfNoteSection_t*)data;
 
-	printf("\t.word %#x\t@ namesz\n", note->namesz);
-	printf("\t.word %#x\t@ descsz\n", note->descsz);
-	printf("\t.word %#x\t@ type\n", note->type);
+      printf("\t.word %#x\t@ namesz\n", note->namesz);
+      printf("\t.word %#x\t@ descsz\n", note->descsz);
+      printf("\t.word %#x\t@ type\n", note->type);
 
-	size_t off = offsetof(ElfNoteSection_t, data);
-	printf("\t.asciz \"%s\"\n", (char*)data + off);
-	for (size_t i = off + note->namesz; i < bfd_section_size (section); i++)
-	{
-	  printf("\t.byte %#x\n", data[i]);
-	}
-	goto quit;
-  }
+      size_t off = offsetof(ElfNoteSection_t, data);
+      printf("\t.asciz \"%s\"\n", (char*)data + off);
+      for (size_t i = off + note->namesz; i < bfd_section_size (section); i++)
+        {
+          printf("\t.byte %#x\n", data[i]);
+        }
+      goto quit;
+    }
 
   width = 4;
 
@@ -4796,40 +4788,40 @@ dump_section (bfd *abfd, asection *section, void *dummy ATTRIBUTE_UNUSED)
             if (ascii_len) {
               printf("/*%#lx*/ .ascii \"%s\"\n", ascii_start, ascii_str);
               memset(ascii_str, 0, sizeof(ascii_str));
-	      ascii_len = 0;
+              ascii_len = 0;
             }
             printf("%s:\n", refs[cref].name);
-	    cref++;
+            cref++;
           }
-	  if ((data[j] >= 0x20 && data[j] <= 0x7e) || data[j] == '\n' || data[j] == '\t') {
-	    if (!ascii_len) ascii_start = j;
+          if ((data[j] >= 0x20 && data[j] <= 0x7e) || data[j] == '\n' || data[j] == '\t') {
+              if (!ascii_len) ascii_start = j;
 
-	    if (ascii_len+2 == sizeof(ascii_str)) abort();
-	    if (data[j] < 0x20 || data[j] == '"') {
-              ascii_str[ascii_len++] = '\\';
-	    }
-	    switch (data[j]) {
-            case '\t':
-              ascii_str[ascii_len++] = 't';
-	      break;
-            case '\n':
-              ascii_str[ascii_len++] = 'n';
-	      break;
-            default:
-	      ascii_str[ascii_len++] = data[j];
-	    }
-	  } else if (data[j] == 0 && ascii_len) {
-	    printf("/*%#lx*/ .asciz \"%s\"\n", ascii_start, ascii_str);
-	    memset(ascii_str, 0, sizeof(ascii_str));
-	    ascii_len = 0;
-	  } else if (ascii_len) {
-	    printf("/*%#lx*/ .ascii \"%s\"\n", ascii_start, ascii_str);
-	    memset(ascii_str, 0, sizeof(ascii_str));
-	    ascii_len = 0;
-	    printf ("/*%#lx*/ .byte %#x @ %c\n", j, (unsigned) (data[j]), ISPRINT (data[j]) ? data[j] : '.');
-	  } else
-	  printf ("/*%#lx*/ .byte %#x @ %c\n", j, (unsigned) (data[j]), ISPRINT (data[j]) ? data[j] : '.');
-	}
+              if (ascii_len+2 == sizeof(ascii_str)) abort();
+              if (data[j] < 0x20 || data[j] == '"') {
+                  ascii_str[ascii_len++] = '\\';
+              }
+              switch (data[j]) {
+                case '\t':
+                  ascii_str[ascii_len++] = 't';
+                  break;
+                case '\n':
+                  ascii_str[ascii_len++] = 'n';
+                  break;
+                default:
+                  ascii_str[ascii_len++] = data[j];
+              }
+          } else if (data[j] == 0 && ascii_len) {
+              printf("/*%#lx*/ .asciz \"%s\"\n", ascii_start, ascii_str);
+              memset(ascii_str, 0, sizeof(ascii_str));
+              ascii_len = 0;
+          } else if (ascii_len) {
+              printf("/*%#lx*/ .ascii \"%s\"\n", ascii_start, ascii_str);
+              memset(ascii_str, 0, sizeof(ascii_str));
+              ascii_len = 0;
+              printf ("/*%#lx*/ .byte %#x @ %c\n", j, (unsigned) (data[j]), ISPRINT (data[j]) ? data[j] : '.');
+          } else
+            printf ("/*%#lx*/ .byte %#x @ %c\n", j, (unsigned) (data[j]), ISPRINT (data[j]) ? data[j] : '.');
+        }
 #if 0
       printf (" ");
       for (j = addr_offset * opb;
@@ -5785,9 +5777,6 @@ main (int argc, char **argv)
 	case 'd':
 	  disassemble = true;
 	  seenflag = true;
-	  wide_output = true;
-	  dump_reloc_info = true;
-	  show_raw_insn = -1;
 	  disasm_sym = optarg;
 	  break;
 	case 'z':
