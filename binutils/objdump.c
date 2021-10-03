@@ -4723,7 +4723,6 @@ dump_section (bfd *abfd, asection *section, void *dummy ATTRIBUTE_UNUSED)
   int cref = 0;
   print_start_section_label(section, ":\n");
 
-  bool dumped = false;
   if (!(strcmp(section->name, ".note.gnu.build-id")))
   {
         ElfNoteSection_t* note = (ElfNoteSection_t*)data;
@@ -4738,7 +4737,7 @@ dump_section (bfd *abfd, asection *section, void *dummy ATTRIBUTE_UNUSED)
 	{
 	  printf("\t.byte %#x\n", data[i]);
 	}
-	dumped = true;
+	goto quit;
   }
 
   width = 4;
@@ -4769,7 +4768,6 @@ dump_section (bfd *abfd, asection *section, void *dummy ATTRIBUTE_UNUSED)
   char ascii_str[1024] = {0};
   size_t ascii_len = 0;
 
-  if (!dumped)
   for (addr_offset = start_offset;
        addr_offset < stop_offset; addr_offset += onaline / opb)
     {
@@ -4845,19 +4843,17 @@ dump_section (bfd *abfd, asection *section, void *dummy ATTRIBUTE_UNUSED)
       putchar ('\n');
 #endif
     }
-  if (ascii_len) {
+  if (ascii_len)
     printf("/*%#lx*/ .ascii \"%s\"\n", ascii_start, ascii_str);
-  }
+
+quit:
   printf(".if %ld != .-", section->size);
   print_start_section_label(section, "\n");
   printf(".abort\n");
   printf(".endif\n");
   for (int i = 0; refs[i].offset != -1; i++) {
-	//printf("i[%d]\n", i);
-	if (i >= cref) {
-		//printf(refs[i].name);
-          printf(".set %s, %s+%#lx\n", refs[i].name, section->name, refs[i].offset);
-	}
+    if (i >= cref)
+      printf(".set %s, %s+%#lx\n", refs[i].name, section->name, refs[i].offset);
     free(refs[i].name);
   }
   printf("\n\n");
