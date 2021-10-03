@@ -4661,7 +4661,7 @@ dump_section (bfd *abfd, asection *section, void *dummy ATTRIBUTE_UNUSED)
 
     printf("\t.bss\n");
     if (section->alignment_power > 0)
-      printf("\t.align %d\n", 2 << (section->alignment_power-1));
+      printf("\t.align %d\n", section->alignment_power);
     printf("\t.skip %ld", size);
     puts("\n");
   }
@@ -4704,7 +4704,7 @@ dump_section (bfd *abfd, asection *section, void *dummy ATTRIBUTE_UNUSED)
 	    (unsigned long) (section->filepos + start_offset));
   printf ("\n");
   if (section->alignment_power > 0)
-    printf("\t.align %d\n", 2 << (section->alignment_power-1));
+    printf("\t.align %d\n", section->alignment_power);
 
   if (!bfd_get_full_section_contents (abfd, section, &data))
     {
