@@ -4595,7 +4595,7 @@ static int ref_compare (const void *lhs, const void *rhs)
 }
 
 static struct symbol_ref*
-enum_section_symbols (bfd *abfd, asection *section)
+enum_symbol_table (bfd *abfd, asection *section)
 {
   long storage_needed = bfd_get_symtab_upper_bound(abfd);
 
@@ -4648,6 +4648,44 @@ typedef struct {
   uint32_t type;
   uint8_t data[];
 } ElfNoteSection_t;
+
+static struct symbol_ref*
+enum_reloc_symbols (bfd *abfd, asection *section)
+{
+  struct symbol_ref* refs;
+
+  if (section->reloc_count) {
+      int cnt = section->reloc_count;
+      printf("@ reloc_count %d\n", cnt);
+
+      long relsize = bfd_get_reloc_upper_bound (abfd, section);
+      if (relsize == 0) goto err;
+      arelent ** relpp = (arelent **) xmalloc (relsize);
+      long relcount = bfd_canonicalize_reloc (abfd, section, relpp, syms);
+        free (relpp);
+      if (relcount < 0) {
+          printf("@ Error bfd_canonicalize_reloc\n");
+          goto err;
+      }
+
+      refs = calloc(cnt + 1, sizeof(struct symbol_ref));
+      struct reloc_cache_entry* ptr = section->relocation;
+      int i = 0;
+      for (; i < cnt; i++) {
+          refs[i].offset = ptr->address;
+          refs[i].name = strdup(ptr->sym_ptr_ptr[0]->name);
+          //printf("@ %#lX %s\n", ptr->address, ptr->sym_ptr_ptr[0]->name);
+          ptr++;
+      }
+      refs[i].offset = -1;
+      return refs;
+  }
+
+err:
+  refs = calloc(1, sizeof(struct symbol_ref));
+  refs[0].offset = -1;
+  return refs;
+}
 
 /* Display a section in hexadecimal format with associated characters.
    Each line prefixed by the zero padded address.  */
@@ -4727,8 +4765,9 @@ dump_section (bfd *abfd, asection *section, void *dummy ATTRIBUTE_UNUSED)
 		 section->name, bfd_errmsg (bfd_get_error ()));
       return;
     }
-  struct symbol_ref* refs = enum_section_symbols(abfd, section);
-  int cref = 0;
+  struct symbol_ref* symbols = enum_symbol_table(abfd, section);
+  struct symbol_ref* relocs = enum_reloc_symbols(abfd, section);
+  int cref = 0, crel = 0;
   print_start_section_label(section, ":\n");
 
   if (!(strcmp(section->name, ".note.gnu.build-id")))
@@ -4800,13 +4839,25 @@ dump_section (bfd *abfd, asection *section, void *dummy ATTRIBUTE_UNUSED)
       for (j = addr_offset * opb;
 	   j < addr_offset * opb + onaline; j++)
 	{
-          while (refs[cref].offset != -1 && (bfd_size_type)refs[cref].offset == j) {
+          if ((relocs[crel].offset != -1) && (bfd_size_type)relocs[crel].offset == j) {
+              uint32_t value = data[j] |
+                (data[j+1] << 8) |
+                (data[j+2] << 16) |
+                (data[j+2] << 24);
+              printf(".word %s+%#x @ relocate\n", relocs[crel].name, value);
+
+              crel++;
+              addr_offset+=3;
+              break;
+          }
+
+          while (symbols[cref].offset != -1 && (bfd_size_type)symbols[cref].offset == j) {
             if (ascii_len) {
               printf("/*%#lx*/ .ascii \"%s\"\n", ascii_start, ascii_str);
               memset(ascii_str, 0, sizeof(ascii_str));
               ascii_len = 0;
             }
-            printf("%s:\n", refs[cref].name);
+            printf("%s:\n", symbols[cref].name);
             cref++;
           }
           if ((data[j] >= 0x20 && data[j] <= 0x7e) || data[j] == '\n' || data[j] == '\t') {
@@ -4859,13 +4910,17 @@ quit:
   print_start_section_label(section, "\n");
   printf(".abort\n");
   printf(".endif\n");
-  for (int i = 0; refs[i].offset != -1; i++) {
+  for (int i = 0; symbols[i].offset != -1; i++) {
     if (i >= cref)
-      printf(".set %s, %s+%#lx\n", refs[i].name, section->name, refs[i].offset);
-    free(refs[i].name);
+      printf(".set %s, %s+%#lx\n", symbols[i].name, section->name, symbols[i].offset);
+    free(symbols[i].name);
+  }
+  for (int i = 0; relocs[i].offset != -1; i++) {
+    free(relocs[i].name);
   }
   printf("\n\n");
-  free (refs);
+  free (symbols);
+  free (relocs);
   free (data);
 }
 
