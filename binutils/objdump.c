@@ -4839,18 +4839,6 @@ dump_section (bfd *abfd, asection *section, void *dummy ATTRIBUTE_UNUSED)
       for (j = addr_offset * opb;
 	   j < addr_offset * opb + onaline; j++)
 	{
-          if ((relocs[crel].offset != -1) && (bfd_size_type)relocs[crel].offset == j) {
-              uint32_t value = data[j] |
-                (data[j+1] << 8) |
-                (data[j+2] << 16) |
-                (data[j+2] << 24);
-              printf(".word %s+%#x @ relocate\n", relocs[crel].name, value);
-
-              crel++;
-              addr_offset+=3;
-              break;
-          }
-
           while (symbols[cref].offset != -1 && (bfd_size_type)symbols[cref].offset == j) {
             if (ascii_len) {
               printf("/*%#lx*/ .ascii \"%s\"\n", ascii_start, ascii_str);
@@ -4860,6 +4848,21 @@ dump_section (bfd *abfd, asection *section, void *dummy ATTRIBUTE_UNUSED)
             printf("%s:\n", symbols[cref].name);
             cref++;
           }
+          if ((relocs[crel].offset != -1) && (bfd_size_type)relocs[crel].offset == j) {
+              uint32_t value = data[j] |
+                (data[j+1] << 8) |
+                (data[j+2] << 16) |
+                (data[j+2] << 24);
+              if (value)
+                printf(".word %s+%#x @ relocate\n", relocs[crel].name, value);
+              else
+                printf(".word %s @ relocate\n", relocs[crel].name);
+
+              crel++;
+              addr_offset+=3;
+              break;
+          }
+
           if ((data[j] >= 0x20 && data[j] <= 0x7e) || data[j] == '\n' || data[j] == '\t') {
               if (!ascii_len) ascii_start = j;
 
