@@ -2754,7 +2754,7 @@ printf_movx(char* buf) {
     static int reinit;
     if (!reinit)
       {
-        if (!compile_re (&regex, "(mov[wt])\\s+(.+), #0"))
+        if (!compile_re (&regex, "(mov[wt]\\w*)\\s+(.+), #0"))
           return;
         reinit = 1;
       }
@@ -2795,7 +2795,7 @@ printf_to_asm (char *buf)
     printf_branch (buf);
   else if (!strncmp (buf, "ldr", 3))
     printf_ldr(buf);
-  else if (!strncmp (buf, "movw\t", 5) || !strncmp (buf, "movt\t", 5))
+  else if (!strncmp (buf, "movw", 4) || !strncmp (buf, "movt", 4))
     printf_movx(buf);
   else if (!strncmp(buf, ".word", 5))
     printf_word(buf);
