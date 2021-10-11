@@ -4716,6 +4716,10 @@ enum_reloc_symbols (bfd *abfd, asection *section)
           //printf("@ %#lX %s\n", ptr->address, ptr->sym_ptr_ptr[0]->name);
           ptr++;
       }
+
+      // make sort
+      qsort(refs, i, sizeof(struct symbol_ref), ref_compare);
+
       refs[i].offset = -1;
       return refs;
   }
