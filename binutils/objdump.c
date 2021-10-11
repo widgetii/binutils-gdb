@@ -4751,23 +4751,40 @@ dump_section (bfd *abfd, asection *section, void *dummy ATTRIBUTE_UNUSED)
   if (!strcmp(section->name + strlen(section->name) - 5, ".text")||!(strcmp(section->name, ".ARM.attributes")))
 	return;
 
-  if (!strcmp(section->name, ".bss")) {
-    size_t size = section->size;
-    if (!size)
-      return;
-
-    printf("\t.bss\n");
-    if (section->alignment_power > 0)
-      printf("\t.align %d\n", section->alignment_power);
-    printf("\t.skip %ld", size);
-    puts("\n");
-  }
-
   if (! process_section_p (section))
     return;
 
-  if ((section->flags & SEC_HAS_CONTENTS) == 0)
-    return;
+  if ((section->flags & SEC_HAS_CONTENTS) == 0) {
+      if (!strcmp(section->name, ".bss")) {
+          size_t size = section->size;
+          if (!size)
+            return;
+
+          printf("\t.bss\n");
+          if (section->alignment_power > 0)
+            printf("\t.align %d\n", section->alignment_power);
+
+          struct symbol_ref* symbols = enum_symbol_table(abfd, section);
+          int cref = 0;
+          unsigned long laddr = 0;
+          while (symbols[cref].offset != -1) {
+              long to_skip = symbols[cref].offset - laddr;
+              if (to_skip)
+                printf("\t.skip %ld\n", to_skip);
+              printf("/*%#lx*/\n%s:\n", symbols[cref].offset, symbols[cref].name);
+              laddr = symbols[cref].offset;
+              free(symbols[cref].name);
+              cref++;
+          }
+
+          if (laddr < size)
+            printf("\t.skip %ld\n", size - laddr);
+
+          puts("\n");
+          free(symbols);
+      }
+      return;
+  }
 
   if ((datasize = bfd_section_size (section)) == 0)
     return;
