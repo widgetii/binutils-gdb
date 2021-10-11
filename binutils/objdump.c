@@ -2650,7 +2650,7 @@ compile_re (regex_t *r, const char *regex_text)
 }
 
 static void
-printf_branch (char *buf)
+printf_branch (char *buf, bool relocated)
 {
   static regex_t regex;
   static int reinit;
@@ -2674,7 +2674,7 @@ printf_branch (char *buf)
       regoff_t label_end = matches[2].rm_eo;
       buf[label_end] = 0;
 
-      printf ("%s%s", buf + op_start, buf + label_start);
+      printf ("%s%s", buf + op_start, relocated ? "" : buf + label_start);
     }
   else
     // fallback
@@ -2785,14 +2785,14 @@ printf_movx(char* buf) {
 }
 
 static void
-printf_to_asm (char *buf)
+printf_to_asm (char *buf, bool relocated)
 {
   char *comment = strchr (buf, ';');
   if (comment)
     *comment = '@';
 
   if (!strncmp (buf, "b", 1))
-    printf_branch (buf);
+    printf_branch (buf, relocated);
   else if (!strncmp (buf, "ldr", 3))
     printf_ldr(buf);
   else if (!strncmp (buf, "movw", 4) || !strncmp (buf, "movt", 4))
@@ -2896,6 +2896,7 @@ disassemble_bytes (struct disassemble_info *inf,
   while (addr_offset < stop_offset)
     {
       bool need_nl = false;
+      bool relocated = false;
 
       octets = 0;
 
@@ -3034,6 +3035,7 @@ disassemble_bytes (struct disassemble_info *inf,
 		    {
 		      inf->flags |= INSN_HAS_RELOC;
 		      aux->reloc = **relppp;
+                      relocated = true;
 		    }
 		}
 
@@ -3143,7 +3145,7 @@ disassemble_bytes (struct disassemble_info *inf,
 	  if (! insns)
 	    printf ("%s", buf);
 	  else if (sfile.pos)
-            printf_to_asm(sfile.buffer);
+            printf_to_asm(sfile.buffer, relocated);
 
 	  if (prefix_addresses
 	      ? show_raw_insn > 0
@@ -3226,7 +3228,7 @@ disassemble_bytes (struct disassemble_info *inf,
 	    objdump_print_symname (aux->abfd, inf, *q->sym_ptr_ptr);
             printf("\t@ %s+%#lx", sname, (*q->sym_ptr_ptr)->value);
 	  } else if (!strcmp(q->howto->name, "R_ARM_CALL")) {
-	    // print nothing, keep it simple
+	    objdump_print_symname (aux->abfd, inf, *q->sym_ptr_ptr);
 	  } else
 	  if (dump_reloc_info || dump_dynamic_reloc_info)
 	    {
