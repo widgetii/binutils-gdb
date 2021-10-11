@@ -2785,6 +2785,41 @@ printf_movx(char* buf) {
 }
 
 static void
+printf_fix_asminstr (char* buf)
+{
+    static regex_t regex;
+    static int reinit;
+    if (!reinit)
+      {
+        if (!compile_re (&regex, "(\\w+)\\s+(.+)"))
+          return;
+        reinit = 1;
+      }
+
+    regmatch_t matches[3];
+    if (regexec (&regex, buf, sizeof (matches) / sizeof (matches[0]),
+                 (regmatch_t *) &matches, 0)
+        == 0)
+      {
+        regoff_t op_start = matches[1].rm_so;
+        regoff_t op_end = matches[1].rm_eo;
+        buf[op_end] = 0;
+
+        regoff_t data_start = matches[2].rm_so;
+        regoff_t data_end = matches[2].rm_eo;
+        buf[data_end] = 0;
+
+        if (!strcmp(buf + op_start, "sbcscc"))
+          printf ("SBCCCS\t%s", buf + data_start);
+        else
+          printf ("FAIL: %s", buf);
+      }
+    else
+      // fallback
+      printf ("FAIL: %s", buf);
+}
+
+static void
 printf_to_asm (char *buf, bool relocated)
 {
   char *comment = strchr (buf, ';');
@@ -2797,6 +2832,8 @@ printf_to_asm (char *buf, bool relocated)
     printf_ldr(buf);
   else if (!strncmp (buf, "movw", 4) || !strncmp (buf, "movt", 4))
     printf_movx(buf);
+  else if (!strncmp (buf, "sbcscc", 6))
+    printf_fix_asminstr(buf);
   else if (!strncmp(buf, ".word", 5))
     printf_word(buf);
   else
