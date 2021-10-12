@@ -2708,7 +2708,8 @@ printf_ldr (char *buf)
 
       printf ("%s%s", buf + op_start, buf + label_start);
       // if R_ARM_REL32 is supported
-      printf("\n.RE%s: /* TODO: why we need this? */", buf + label_start);
+      /* TODO: why we need this? */
+      //printf("\n.RE%s:", buf + label_start);
     }
   else
     // fallback
