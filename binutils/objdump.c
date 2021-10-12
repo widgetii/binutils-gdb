@@ -1445,7 +1445,7 @@ objdump_print_addr_with_sym (bfd *abfd, asection *sec, asymbol *sym,
       else if (vma > bfd_asymbol_value (sym))
 	{
 	  char buf[255] = {0};
-	  sprintf(buf, "%c_", label_pr);
+	  sprintf(buf, ".%c_", label_pr);
 	  (*inf->fprintf_func) (inf->stream, buf);
 
 	  objdump_print_value (vma - bfd_asymbol_value (sym) + cur_offset, inf, true);
@@ -2656,7 +2656,7 @@ printf_branch (char *buf, bool relocated)
   static int reinit;
   if (!reinit)
     {
-      if (!compile_re (&regex, "(b\\w*\\s+)[0-9a-f]+\\s+(\\w+)"))
+      if (!compile_re (&regex, "(b\\w*\\s+)[0-9a-f]+\\s+((\\w|\\.).+)"))
         return;
       reinit = 1;
     }
@@ -2688,7 +2688,7 @@ printf_ldr (char *buf)
   static int reinit;
   if (!reinit)
     {
-      if (!compile_re (&regex, "(ldr\\s+r[0-9]+, )\\[.+\\].+(\\w_[0-9a-f]+)"))
+      if (!compile_re (&regex, "(ldr\\w*\\s+r[0-9]+, )\\[.+\\].+(\\.\\w_[0-9a-f]+)"))
         return;
       reinit = 1;
     }
@@ -2708,7 +2708,7 @@ printf_ldr (char *buf)
 
       printf ("%s%s", buf + op_start, buf + label_start);
       // if R_ARM_REL32 is supported
-      printf("\nRE%s:", buf + label_start);
+      printf("\n.RE%s: /* TODO: why we need this? */", buf + label_start);
     }
   else
     // fallback
@@ -2994,7 +2994,7 @@ disassemble_bytes (struct disassemble_info *inf,
 	      if (*s == '\0')
 		*--s = '0';
 	      char addr[20];
-	      snprintf(addr, sizeof(addr), "%c_%s", label_pr, s);
+	      snprintf(addr, sizeof(addr), ".%c_%s", label_pr, s);
 	      printf ("%8s:\t", addr);
 	    }
 	  else
