@@ -1445,7 +1445,7 @@ objdump_print_addr_with_sym (bfd *abfd, asection *sec, asymbol *sym,
       else if (vma > bfd_asymbol_value (sym))
 	{
 	  char buf[255] = {0};
-	  sprintf(buf, ".%c_", label_pr);
+	  sprintf(buf, "%c_", label_pr);
 	  (*inf->fprintf_func) (inf->stream, buf);
 
 	  objdump_print_value (vma - bfd_asymbol_value (sym) + cur_offset, inf, true);
@@ -2688,7 +2688,7 @@ printf_ldr (char *buf)
   static int reinit;
   if (!reinit)
     {
-      if (!compile_re (&regex, "(ldr\\w*\\s+r[0-9]+, )\\[.+\\].+(\\.\\w_[0-9a-f]+)"))
+      if (!compile_re (&regex, "(ldr\\w*\\s+r[0-9]+, )\\[.+\\]\\s+@ [0-9a-f]+ (\\.*\\w_[0-9a-f]+)"))
         return;
       reinit = 1;
     }
@@ -2843,6 +2843,19 @@ printf_to_asm (char *buf, bool relocated)
     }
 }
 
+static const char*
+has_symbol (const char* sname)
+{
+  asymbol **sptr = syms;
+  while (*sptr) {
+      if (!strcmp((*sptr)->section->name, sname) && (*sptr)->value == cur_data) {
+          return (*sptr)->name;
+      }
+      sptr++;
+  }
+  return NULL;
+}
+
 /* Disassemble some data in memory between given values.  */
 
 static void
@@ -2995,7 +3008,7 @@ disassemble_bytes (struct disassemble_info *inf,
 	      if (*s == '\0')
 		*--s = '0';
 	      char addr[20];
-	      snprintf(addr, sizeof(addr), ".%c_%s", label_pr, s);
+	      snprintf(addr, sizeof(addr), "%c_%s", label_pr, s);
 	      printf ("%8s:\t", addr);
 	    }
 	  else
@@ -3258,7 +3271,11 @@ disassemble_bytes (struct disassemble_info *inf,
 	  if (!strcmp(q->howto->name, "R_ARM_REL32")) {
             printf("%s+%#lx-.\t@%#lx REL", sname, cur_data, cur_data);
 	  } else if (!strcmp(q->howto->name, "R_ARM_ABS32")) {
-            printf("%s+%#lx\t@%#lx ABS", sname, cur_data, cur_data);
+            const char* cor_symbol = has_symbol(sname);
+            if (cor_symbol)
+              printf("%s\t@ ABS", cor_symbol);
+            else
+             printf("%s+%#lx\t@%#lx ABS", sname, cur_data, cur_data);
 	  } else if (!strcmp(q->howto->name, "R_ARM_MOVW_ABS_NC")) {
 	    objdump_print_symname (aux->abfd, inf, *q->sym_ptr_ptr);
             printf("\t@ %s+%#lx", sname, (*q->sym_ptr_ptr)->value);
@@ -4629,9 +4646,20 @@ struct symbol_ref {
     char* name;
 };
 
+struct symbol_reloc {
+    ssize_t offset;
+    char* name;
+    struct bfd_symbol* symbol;
+};
+
 static int ref_compare (const void *lhs, const void *rhs)
 {
   return ((const struct symbol_ref*)lhs)->offset - ((const struct symbol_ref*)rhs)->offset;
+}
+
+static int rel_compare (const void *lhs, const void *rhs)
+{
+  return ((const struct symbol_reloc*)lhs)->offset - ((const struct symbol_reloc*)rhs)->offset;
 }
 
 static struct symbol_ref*
@@ -4689,10 +4717,10 @@ typedef struct {
   uint8_t data[];
 } ElfNoteSection_t;
 
-static struct symbol_ref*
+static struct symbol_reloc*
 enum_reloc_symbols (bfd *abfd, asection *section)
 {
-  struct symbol_ref* refs;
+  struct symbol_reloc* refs;
 
   if (section->reloc_count) {
       int cnt = section->reloc_count;
@@ -4708,27 +4736,51 @@ enum_reloc_symbols (bfd *abfd, asection *section)
           goto err;
       }
 
-      refs = calloc(cnt + 1, sizeof(struct symbol_ref));
+      refs = calloc(cnt + 1, sizeof(struct symbol_reloc));
       struct reloc_cache_entry* ptr = section->relocation;
       int i = 0;
       for (; i < cnt; i++) {
           refs[i].offset = ptr->address;
           refs[i].name = strdup(ptr->sym_ptr_ptr[0]->name);
+          refs[i].symbol = ptr->sym_ptr_ptr[0];
           //printf("@ %#lX %s\n", ptr->address, ptr->sym_ptr_ptr[0]->name);
           ptr++;
       }
 
       // make sort
-      qsort(refs, i, sizeof(struct symbol_ref), ref_compare);
+      qsort(refs, i, sizeof(struct symbol_reloc), rel_compare);
 
       refs[i].offset = -1;
       return refs;
   }
 
 err:
-  refs = calloc(1, sizeof(struct symbol_ref));
+  refs = calloc(1, sizeof(struct symbol_reloc));
   refs[0].offset = -1;
   return refs;
+}
+
+static void
+resolve_symbol (char* buf, size_t bufsz, struct bfd_symbol *symbol, unsigned long value)
+{
+  if (!strcmp(symbol->name, symbol->section->name)) {
+      // if symbol name is the same as section name, try to find better
+      // alternative
+
+      asymbol **sptr = syms;
+      while (*sptr) {
+          if (!strcmp((*sptr)->section->name, symbol->name) && (*sptr)->value == value) {
+              snprintf(buf, bufsz, "%s", (*sptr)->name);
+              return;
+          }
+          sptr++;
+      }
+  }
+
+  if (value)
+    snprintf(buf, bufsz, "%s+%#lx", symbol->name, value);
+  else
+    snprintf(buf, bufsz, "%s", symbol->name);
 }
 
 /* Display a section in hexadecimal format with associated characters.
@@ -4765,6 +4817,7 @@ dump_section (bfd *abfd, asection *section, void *dummy ATTRIBUTE_UNUSED)
           if (section->alignment_power > 0)
             printf("\t.align %d\n", section->alignment_power);
 
+          printf("start__bss:\n");
           struct symbol_ref* symbols = enum_symbol_table(abfd, section);
           int cref = 0;
           unsigned long laddr = 0;
@@ -4784,7 +4837,7 @@ dump_section (bfd *abfd, asection *section, void *dummy ATTRIBUTE_UNUSED)
           puts("\n");
           free(symbols);
       }
-      return;
+      goto add_assert;
   }
 
   if ((datasize = bfd_section_size (section)) == 0)
@@ -4827,7 +4880,7 @@ dump_section (bfd *abfd, asection *section, void *dummy ATTRIBUTE_UNUSED)
       return;
     }
   struct symbol_ref* symbols = enum_symbol_table(abfd, section);
-  struct symbol_ref* relocs = enum_reloc_symbols(abfd, section);
+  struct symbol_reloc* relocs = enum_reloc_symbols(abfd, section);
   int cref = 0, crel = 0;
   print_start_section_label(section, ":\n");
 
@@ -4914,10 +4967,9 @@ dump_section (bfd *abfd, asection *section, void *dummy ATTRIBUTE_UNUSED)
                 (data[j+1] << 8) |
                 (data[j+2] << 16) |
                 (data[j+2] << 24);
-              if (value)
-                printf(".word %s+%#x @ relocate\n", relocs[crel].name, value);
-              else
-                printf(".word %s @ relocate\n", relocs[crel].name);
+              char sname[256] = {0};
+              resolve_symbol(sname, sizeof(sname), relocs[crel].symbol, value);
+              printf(".word %s @ relocate\n", sname);
 
               crel++;
               addr_offset+=3;
@@ -4970,10 +5022,6 @@ dump_section (bfd *abfd, asection *section, void *dummy ATTRIBUTE_UNUSED)
     printf("/*%#lx*/ .ascii \"%s\"\n", ascii_start, ascii_str);
 
 quit:
-  printf(".if %ld != .-", section->size);
-  print_start_section_label(section, "\n");
-  printf(".abort\n");
-  printf(".endif\n");
   for (int i = 0; symbols[i].offset != -1; i++) {
     if (i >= cref)
       printf(".set %s, %s+%#lx\n", symbols[i].name, section->name, symbols[i].offset);
@@ -4986,6 +5034,11 @@ quit:
   free (symbols);
   free (relocs);
   free (data);
+add_assert:
+  printf(".if %ld != .-", section->size);
+  print_start_section_label(section, "\n");
+  printf(".abort\n");
+  printf(".endif\n");
 }
 
 /* Actually display the various requested regions.  */
