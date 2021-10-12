@@ -2656,12 +2656,12 @@ printf_branch (char *buf, bool relocated)
   static int reinit;
   if (!reinit)
     {
-      if (!compile_re (&regex, "(b\\w*\\s+)[0-9a-f]+\\s+((\\w|\\.).+)"))
+      if (!compile_re (&regex, "(b[a-z]*)\\s+([0-9a-f]+)\\s+(.+)"))
         return;
       reinit = 1;
     }
 
-  regmatch_t matches[3];
+  regmatch_t matches[4];
   if (regexec (&regex, buf, sizeof (matches) / sizeof (matches[0]),
                (regmatch_t *) &matches, 0)
       == 0)
@@ -2670,11 +2670,16 @@ printf_branch (char *buf, bool relocated)
       regoff_t op_end = matches[1].rm_eo;
       buf[op_end] = 0;
 
-      regoff_t label_start = matches[2].rm_so;
-      regoff_t label_end = matches[2].rm_eo;
+      regoff_t off_start = matches[2].rm_so;
+      regoff_t off_end = matches[2].rm_eo;
+      buf[off_end] = 0;
+      cur_data = strtoul(buf + off_start, NULL, 16);
+
+      regoff_t label_start = matches[3].rm_so;
+      regoff_t label_end = matches[3].rm_eo;
       buf[label_end] = 0;
 
-      printf ("%s%s", buf + op_start, relocated ? "" : buf + label_start);
+      printf ("%s\t%s", buf + op_start, relocated ? "" : buf + label_start);
     }
   else
     // fallback
@@ -3271,6 +3276,8 @@ disassemble_bytes (struct disassemble_info *inf,
 	  if (!strcmp(q->howto->name, "R_ARM_REL32")) {
             printf("%s+%#lx-.\t@%#lx REL", sname, cur_data, cur_data);
 	  } else if (!strcmp(q->howto->name, "R_ARM_ABS32")) {
+            if (!strcmp(sname, "*UND*")) sname = (*q->sym_ptr_ptr)->name;
+
             const char* cor_symbol = has_symbol(sname);
             if (cor_symbol)
               printf("%s\t@ ABS", cor_symbol);
@@ -3282,6 +3289,8 @@ disassemble_bytes (struct disassemble_info *inf,
 	  } else if (!strcmp(q->howto->name, "R_ARM_MOVT_ABS")) {
 	    objdump_print_symname (aux->abfd, inf, *q->sym_ptr_ptr);
             printf("\t@ %s+%#lx", sname, (*q->sym_ptr_ptr)->value);
+	  } else if (!strcmp(q->howto->name, "R_ARM_JUMP24")) {
+            printf("%s+%#lx\t@ JUMP24", sname, cur_data);
 	  } else if (!strcmp(q->howto->name, "R_ARM_CALL")) {
 	    objdump_print_symname (aux->abfd, inf, *q->sym_ptr_ptr);
 	  } else
@@ -3525,6 +3534,8 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
     label_pr = 'I';
   else if (!strcmp(sname, ".exit.text"))
     label_pr = 'E';
+  else if (!strcmp(sname, ".fixup"))
+    label_pr = 'F';
   else
     label_pr = 'U';
 
@@ -3660,18 +3671,17 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
 	}
 
       if (! prefix_addresses && do_print)
-	{
-	  pinfo->fprintf_func (pinfo->stream, "\n@ %lx\n", addr);
-	  if (sym->flags & BSF_GLOBAL)
-	    pinfo->fprintf_func (pinfo->stream, "\t.global %s\n", bfd_asymbol_name (sym));
-	  if (sym->flags & BSF_FUNCTION)
-	    pinfo->fprintf_func (pinfo->stream, "\t.type\t%s, %%function\n", bfd_asymbol_name (sym));
-	  cur_offset = addr;
-	  //printf("offset %#lX\n", addr);
-	  //objdump_print_addr_with_sym (abfd, section, sym, addr,
-				       //pinfo, false);
-	  pinfo->fprintf_func (pinfo->stream, "%s:\n", bfd_asymbol_name (sym));
-	}
+        {
+          pinfo->fprintf_func (pinfo->stream, "\n@ %lx\n", addr);
+          if (sym) {
+              if (sym->flags & BSF_GLOBAL)
+                pinfo->fprintf_func (pinfo->stream, "\t.global %s\n", bfd_asymbol_name (sym));
+              if (sym->flags & BSF_FUNCTION)
+                pinfo->fprintf_func (pinfo->stream, "\t.type\t%s, %%function\n", bfd_asymbol_name (sym));
+              cur_offset = addr;
+              pinfo->fprintf_func (pinfo->stream, "%s:\n", bfd_asymbol_name (sym));
+          }
+        }
 
       if (sym != NULL && bfd_asymbol_value (sym) > addr)
 	nextsym = sym;
@@ -3757,7 +3767,8 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
 			     addr_offset, nextstop_offset,
 			     rel_offset, &rel_pp, rel_ppend);
 
-	  printf(".size\t%s,.-%s\n", bfd_asymbol_name (sym), bfd_asymbol_name (sym));
+          if (sym)
+            printf(".size\t%s,.-%s\n", bfd_asymbol_name (sym), bfd_asymbol_name (sym));
 
 	  /* Free jumps.  */
 	  while (detected_jumps)
@@ -4801,7 +4812,7 @@ dump_section (bfd *abfd, asection *section, void *dummy ATTRIBUTE_UNUSED)
   int count;
   int width;
 
-  if (!strcmp(section->name + strlen(section->name) - 5, ".text")||!(strcmp(section->name, ".ARM.attributes")))
+  if (section->flags & SEC_CODE || !(strcmp(section->name, ".ARM.attributes")))
 	return;
 
   if (! process_section_p (section))
