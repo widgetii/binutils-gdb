@@ -2826,25 +2826,25 @@ printf_fix_asminstr (char* buf)
 }
 
 static void
-printf_to_asm (char *buf, bool relocated)
+printf_to_asm (char *statement, bool relocated)
 {
-  char *comment = strchr (buf, ';');
+  char *comment = strchr (statement, ';');
   if (comment)
     *comment = '@';
 
-  if (!strncmp (buf, "b", 1))
-    printf_branch (buf, relocated);
-  else if (!strncmp (buf, "ldr", 3))
-    printf_ldr(buf);
-  else if (!strncmp (buf, "movw", 4) || !strncmp (buf, "movt", 4))
-    printf_movx(buf);
-  else if (!strncmp (buf, "sbcscc", 6))
-    printf_fix_asminstr(buf);
-  else if (!strncmp(buf, ".word", 5))
-    printf_word(buf);
+  if (startswith (statement, "b"))
+    printf_branch (statement, relocated);
+  else if (startswith (statement, "ldr"))
+    printf_ldr(statement);
+  else if (startswith (statement, "movw") || startswith (statement, "movt"))
+    printf_movx(statement);
+  else if (startswith (statement, "sbcscc"))
+    printf_fix_asminstr(statement);
+  else if (startswith(statement, ".word"))
+    printf_word(statement);
   else
     {
-      printf ("%s", buf);
+      printf ("%s", statement);
     }
 }
 
