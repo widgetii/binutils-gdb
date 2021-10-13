@@ -680,10 +680,9 @@ gdbsim_target_open (const char *args, int from_tty)
   int len;
   char *arg_buf;
   struct sim_inferior_data *sim_data;
-  const char *sysroot;
   SIM_DESC gdbsim_desc;
 
-  sysroot = gdb_sysroot;
+  const char *sysroot = gdb_sysroot.c_str ();
   if (is_target_filename (sysroot))
     sysroot += strlen (TARGET_SYSROOT_PREFIX);
 

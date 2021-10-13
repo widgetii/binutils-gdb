@@ -19,6 +19,11 @@ show source open
   to open and read source code files, which can be useful if the files
   are located over a slow network connection.
 
+set varsize-limit
+show varsize-limit
+  These are now deprecated aliases for "set max-value-size" and
+  "show max-value-size".
+
 maint set internal-error backtrace on|off
 maint show internal-error backtrace
 maint set internal-warning backtrace on|off
@@ -33,6 +38,12 @@ maint show internal-warning backtrace
      and adds the value it represents to GDB's history list.  An
      integer, the index of the new item in the history list, is
      returned.
+
+  ** New gdb.events.gdb_exiting event.  This event is called with a
+     gdb.GdbExitingEvent object which has the read-only attribute
+     'exit_code', which contains the value of the GDB exit code.  This
+     event is triggered once GDB decides it is going to exit, but
+     before GDB starts to clean up its internal state.
 
 *** Changes in GDB 11
 
@@ -140,6 +151,10 @@ maint show internal-warning backtrace
   now understood by GDB, and can be used to describe the vector
   registers of a target.  The precise requirements of this register
   feature are documented in the GDB manual.
+
+* For ARM targets, the "org.gnu.gdb.arm.m-profile-mve" feature is now
+  supported by GDB and describes a new VPR register from the ARM MVE
+  (Helium) extension. See the GDB manual for more information.
 
 * TUI improvements
 

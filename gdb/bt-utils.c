@@ -29,15 +29,13 @@ gdb_internal_backtrace_set_cmd (const char *args, int from_tty,
 				cmd_list_element *c)
 {
   gdb_assert (c->type == set_cmd);
-  gdb_assert (c->var_type == var_boolean);
-  gdb_assert (c->var != nullptr);
+  gdb_assert (c->var.has_value ());
+  gdb_assert (c->var->type () == var_boolean);
 
 #ifndef GDB_PRINT_INTERNAL_BACKTRACE
-  bool *var_ptr = (bool *) c->var;
-
-  if (*var_ptr)
+  if (c->var->get<bool> ())
     {
-      *var_ptr = false;
+      c->var->set<bool> (false);
       error (_("support for this feature is not compiled into GDB"));
     }
 #endif
@@ -90,7 +88,7 @@ libbacktrace_print (void *data, uintptr_t pc, const char *filename,
      files.  We are also careful to ensure we don't overflow this buffer.  */
   char buf[20];
 
-  snprintf (buf, sizeof (buf), "0x%lx ", pc);
+  snprintf (buf, sizeof (buf), "0x%" PRIxPTR " ", pc);
   buf[sizeof (buf) - 1] = '\0';
   sig_write (buf);
   sig_write (function == nullptr ? "???" : function);

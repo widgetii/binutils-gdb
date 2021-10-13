@@ -135,30 +135,30 @@ build_gdb_vtable_type (struct gdbarch *arch)
   offset = 0;
 
   /* ptrdiff_t vcall_and_vbase_offsets[0]; */
-  FIELD_NAME (*field) = "vcall_and_vbase_offsets";
+  field->set_name ("vcall_and_vbase_offsets");
   field->set_type (lookup_array_range_type (ptrdiff_type, 0, -1));
-  SET_FIELD_BITPOS (*field, offset * TARGET_CHAR_BIT);
+  field->set_loc_bitpos (offset * TARGET_CHAR_BIT);
   offset += TYPE_LENGTH (field->type ());
   field++;
 
   /* ptrdiff_t offset_to_top; */
-  FIELD_NAME (*field) = "offset_to_top";
+  field->set_name ("offset_to_top");
   field->set_type (ptrdiff_type);
-  SET_FIELD_BITPOS (*field, offset * TARGET_CHAR_BIT);
+  field->set_loc_bitpos (offset * TARGET_CHAR_BIT);
   offset += TYPE_LENGTH (field->type ());
   field++;
 
   /* void *type_info; */
-  FIELD_NAME (*field) = "type_info";
+  field->set_name ("type_info");
   field->set_type (void_ptr_type);
-  SET_FIELD_BITPOS (*field, offset * TARGET_CHAR_BIT);
+  field->set_loc_bitpos (offset * TARGET_CHAR_BIT);
   offset += TYPE_LENGTH (field->type ());
   field++;
 
   /* void (*virtual_functions[0]) (); */
-  FIELD_NAME (*field) = "virtual_functions";
+  field->set_name ("virtual_functions");
   field->set_type (lookup_array_range_type (ptr_to_void_fn_type, 0, -1));
-  SET_FIELD_BITPOS (*field, offset * TARGET_CHAR_BIT);
+  field->set_loc_bitpos (offset * TARGET_CHAR_BIT);
   offset += TYPE_LENGTH (field->type ());
   field++;
 
@@ -644,17 +644,14 @@ gnuv3_print_method_ptr (const gdb_byte *contents,
 	 possible paths to the method based on the adjustment.  */
       if (physname)
 	{
-	  char *demangled_name = gdb_demangle (physname,
-					       DMGL_ANSI | DMGL_PARAMS);
+	  gdb::unique_xmalloc_ptr<char> demangled_name
+	    = gdb_demangle (physname, DMGL_ANSI | DMGL_PARAMS);
 
 	  fprintf_filtered (stream, "&virtual ");
 	  if (demangled_name == NULL)
 	    fputs_filtered (physname, stream);
 	  else
-	    {
-	      fputs_filtered (demangled_name, stream);
-	      xfree (demangled_name);
-	    }
+	    fputs_filtered (demangled_name.get (), stream);
 	  return;
 	}
     }
@@ -1036,16 +1033,16 @@ build_std_type_info_type (struct gdbarch *arch)
   offset = 0;
 
   /* The vtable.  */
-  FIELD_NAME (*field) = "_vptr.type_info";
+  field->set_name ("_vptr.type_info");
   field->set_type (void_ptr_type);
-  SET_FIELD_BITPOS (*field, offset * TARGET_CHAR_BIT);
+  field->set_loc_bitpos (offset * TARGET_CHAR_BIT);
   offset += TYPE_LENGTH (field->type ());
   field++;
 
   /* The name.  */
-  FIELD_NAME (*field) = "__name";
+  field->set_name ("__name");
   field->set_type (char_ptr_type);
-  SET_FIELD_BITPOS (*field, offset * TARGET_CHAR_BIT);
+  field->set_loc_bitpos (offset * TARGET_CHAR_BIT);
   offset += TYPE_LENGTH (field->type ());
   field++;
 

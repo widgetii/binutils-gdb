@@ -230,9 +230,9 @@ make_gdb_type (struct gdbarch *gdbarch, struct tdesc_type *ttype)
 	      bitsize = f.end - f.start + 1;
 	      total_size = e->size * TARGET_CHAR_BIT;
 	      if (gdbarch_byte_order (m_gdbarch) == BFD_ENDIAN_BIG)
-		SET_FIELD_BITPOS (fld[0], total_size - f.start - bitsize);
+		fld->set_loc_bitpos (total_size - f.start - bitsize);
 	      else
-		SET_FIELD_BITPOS (fld[0], f.start);
+		fld->set_loc_bitpos (f.start);
 	      FIELD_BITSIZE (fld[0]) = bitsize;
 	    }
 	  else
@@ -298,7 +298,7 @@ make_gdb_type (struct gdbarch *gdbarch, struct tdesc_type *ttype)
 					       xstrdup (f.name.c_str ()),
 					       NULL);
 
-	  SET_FIELD_BITPOS (fld[0], f.start);
+	  fld->set_loc_enumval (f.start);
 	}
     }
 
@@ -510,7 +510,7 @@ target_desc_info_free (struct target_desc_info *tdesc_info)
 
 /* The string manipulated by the "set tdesc filename ..." command.  */
 
-static char *tdesc_filename_cmd_string;
+static std::string tdesc_filename_cmd_string;
 
 /* Fetch the current target's description, and switch the current
    architecture to one which incorporates that description.  */

@@ -9050,9 +9050,9 @@ quirk_rust_enum (struct type *type, struct objfile *objfile)
 
 #define RUST_ENUM_PREFIX "RUST$ENCODED$ENUM$"
   if (type->num_fields () == 1
-      && startswith (TYPE_FIELD_NAME (type, 0), RUST_ENUM_PREFIX))
+      && startswith (type->field (0).name (), RUST_ENUM_PREFIX))
     {
-      const char *name = TYPE_FIELD_NAME (type, 0) + strlen (RUST_ENUM_PREFIX);
+      const char *name = type->field (0).name () + strlen (RUST_ENUM_PREFIX);
 
       /* Decode the field name to find the offset of the
 	 discriminant.  */
@@ -9070,7 +9070,7 @@ quirk_rust_enum (struct type *type, struct objfile *objfile)
 	    {
 	      complaint (_("Could not parse Rust enum encoding string \"%s\""
 			   "[in module %s]"),
-			 TYPE_FIELD_NAME (type, 0),
+			 type->field (0).name (),
 			 objfile_name (objfile));
 	      return;
 	    }
@@ -9092,17 +9092,17 @@ quirk_rust_enum (struct type *type, struct objfile *objfile)
       /* Put the discriminant at index 0.  */
       type->field (0).set_type (field_type);
       TYPE_FIELD_ARTIFICIAL (type, 0) = 1;
-      TYPE_FIELD_NAME (type, 0) = "<<discriminant>>";
-      SET_FIELD_BITPOS (type->field (0), bit_offset);
+      type->field (0).set_name ("<<discriminant>>");
+      type->field (0).set_loc_bitpos (bit_offset);
 
       /* The order of fields doesn't really matter, so put the real
 	 field at index 1 and the data-less field at index 2.  */
       type->field (1) = saved_field;
-      TYPE_FIELD_NAME (type, 1)
-	= rust_last_path_segment (type->field (1).type ()->name ());
+      type->field (1).set_name
+	(rust_last_path_segment (type->field (1).type ()->name ()));
       type->field (1).type ()->set_name
 	(rust_fully_qualify (&objfile->objfile_obstack, type->name (),
-			     TYPE_FIELD_NAME (type, 1)));
+			     type->field (1).name ()));
 
       const char *dataless_name
 	= rust_fully_qualify (&objfile->objfile_obstack, type->name (),
@@ -9112,8 +9112,8 @@ quirk_rust_enum (struct type *type, struct objfile *objfile)
       type->field (2).set_type (dataless_type);
       /* NAME points into the original discriminant name, which
 	 already has the correct lifetime.  */
-      TYPE_FIELD_NAME (type, 2) = name;
-      SET_FIELD_BITPOS (type->field (2), 0);
+      type->field (2).set_name (name);
+      type->field (2).set_loc_bitpos (0);
 
       /* Indicate that this is a variant type.  */
       static discriminant_range ranges[1] = { { 0, 0 } };
@@ -9121,7 +9121,7 @@ quirk_rust_enum (struct type *type, struct objfile *objfile)
     }
   /* A union with a single anonymous field is probably an old-style
      univariant enum.  */
-  else if (type->num_fields () == 1 && streq (TYPE_FIELD_NAME (type, 0), ""))
+  else if (type->num_fields () == 1 && streq (type->field (0).name (), ""))
     {
       /* Smash this type to be a structure type.  We have to do this
 	 because the type has already been recorded.  */
@@ -9130,7 +9130,7 @@ quirk_rust_enum (struct type *type, struct objfile *objfile)
       struct type *field_type = type->field (0).type ();
       const char *variant_name
 	= rust_last_path_segment (field_type->name ());
-      TYPE_FIELD_NAME (type, 0) = variant_name;
+      type->field (0).set_name (variant_name);
       field_type->set_name
 	(rust_fully_qualify (&objfile->objfile_obstack,
 			     type->name (), variant_name));
@@ -9154,7 +9154,7 @@ quirk_rust_enum (struct type *type, struct objfile *objfile)
 	      /* Could be data-less variant, so keep going.  */
 	      disr_type = nullptr;
 	    }
-	  else if (strcmp (TYPE_FIELD_NAME (disr_type, 0),
+	  else if (strcmp (disr_type->field (0).name (),
 			   "RUST$ENUM$DISR") != 0)
 	    {
 	      /* Not a Rust enum.  */
@@ -9189,7 +9189,7 @@ quirk_rust_enum (struct type *type, struct objfile *objfile)
       /* Install the discriminant at index 0 in the union.  */
       type->field (0) = *disr_field;
       TYPE_FIELD_ARTIFICIAL (type, 0) = 1;
-      TYPE_FIELD_NAME (type, 0) = "<<discriminant>>";
+      type->field (0).set_name ("<<discriminant>>");
 
       /* We need a way to find the correct discriminant given a
 	 variant name.  For convenience we build a map here.  */
@@ -9200,7 +9200,7 @@ quirk_rust_enum (struct type *type, struct objfile *objfile)
 	  if (TYPE_FIELD_LOC_KIND (enum_type, i) == FIELD_LOC_KIND_ENUMVAL)
 	    {
 	      const char *name
-		= rust_last_path_segment (TYPE_FIELD_NAME (enum_type, i));
+		= rust_last_path_segment (enum_type->field (i).name ());
 	      discriminant_map[name] = TYPE_FIELD_ENUMVAL (enum_type, i);
 	    }
 	}
@@ -9239,7 +9239,7 @@ quirk_rust_enum (struct type *type, struct objfile *objfile)
 	      sub_type->set_num_fields (sub_type->num_fields () - 1);
 	      sub_type->set_fields (sub_type->fields () + 1);
 	    }
-	  TYPE_FIELD_NAME (type, i) = variant_name;
+	  type->field (i).set_name (variant_name);
 	  sub_type->set_name
 	    (rust_fully_qualify (&objfile->objfile_obstack,
 				 type->name (), variant_name));
@@ -9510,7 +9510,7 @@ process_full_comp_unit (dwarf2_cu *cu, enum language pretend_language)
       if (gcc_4_minor >= 5)
 	cust->epilogue_unwind_valid = 1;
 
-      cust->call_site_htab = cu->call_site_htab;
+      cust->set_call_site_htab (cu->call_site_htab);
     }
 
   per_objfile->set_symtab (cu->per_cu, cust);
@@ -10174,9 +10174,8 @@ dwarf2_physname (const char *name, struct die_info *die, struct dwarf2_cu *cu)
 	     to look up their definition from their declaration so
 	     the only disadvantage remains the minimal symbol variant
 	     `long name(params)' does not have the proper inferior type.  */
-	  demangled.reset (gdb_demangle (mangled,
-					 (DMGL_PARAMS | DMGL_ANSI
-					  | DMGL_RET_DROP)));
+	  demangled = gdb_demangle (mangled, (DMGL_PARAMS | DMGL_ANSI
+					      | DMGL_RET_DROP));
 	}
       if (demangled)
 	canon = demangled.get ();
@@ -12134,10 +12133,10 @@ try_open_dwop_file (dwarf2_per_objfile *per_objfile,
   gdb::unique_xmalloc_ptr<char> search_path_holder;
   if (search_cwd)
     {
-      if (*debug_file_directory != '\0')
+      if (!debug_file_directory.empty ())
 	{
 	  search_path_holder.reset (concat (".", dirname_separator_string,
-					    debug_file_directory,
+					    debug_file_directory.c_str (),
 					    (char *) NULL));
 	  search_path = search_path_holder.get ();
 	}
@@ -12145,7 +12144,7 @@ try_open_dwop_file (dwarf2_per_objfile *per_objfile,
 	search_path = ".";
     }
   else
-    search_path = debug_file_directory;
+    search_path = debug_file_directory.c_str ();
 
   /* Add the path for the executable binary to the list of search paths.  */
   std::string objfile_dir = ldirname (objfile_name (per_objfile->objfile));
@@ -12216,7 +12215,7 @@ open_dwo_file (dwarf2_per_objfile *per_objfile,
   /* That didn't work, try debug-file-directory, which, despite its name,
      is a list of paths.  */
 
-  if (*debug_file_directory == '\0')
+  if (debug_file_directory.empty ())
     return NULL;
 
   return try_open_dwop_file (per_objfile, file_name,
@@ -12545,7 +12544,7 @@ open_dwp_file (dwarf2_per_objfile *per_objfile, const char *file_name)
      [IWBN if the dwp file name was recorded in the executable, akin to
      .gnu_debuglink, but that doesn't exist yet.]
      Strip the directory from FILE_NAME and search again.  */
-  if (*debug_file_directory != '\0')
+  if (!debug_file_directory.empty ())
     {
       /* Don't implicitly search the current directory here.
 	 If the user wants to search "." to handle this case,
@@ -13341,7 +13340,6 @@ read_call_site_scope (struct die_info *die, struct dwarf2_cu *cu)
   struct gdbarch *gdbarch = objfile->arch ();
   CORE_ADDR pc, baseaddr;
   struct attribute *attr;
-  struct call_site *call_site, call_site_local;
   void **slot;
   int nparams;
   struct die_info *child_die;
@@ -13364,12 +13362,14 @@ read_call_site_scope (struct die_info *die, struct dwarf2_cu *cu)
     }
   pc = attr->as_address () + baseaddr;
   pc = gdbarch_adjust_dwarf2_addr (gdbarch, pc);
+  pc -= baseaddr;
 
   if (cu->call_site_htab == NULL)
-    cu->call_site_htab = htab_create_alloc_ex (16, core_addr_hash, core_addr_eq,
-					       NULL, &objfile->objfile_obstack,
+    cu->call_site_htab = htab_create_alloc_ex (16, call_site::hash,
+					       call_site::eq, NULL,
+					       &objfile->objfile_obstack,
 					       hashtab_obstack_allocate, NULL);
-  call_site_local.pc = pc;
+  struct call_site call_site_local (pc, nullptr, nullptr);
   slot = htab_find_slot (cu->call_site_htab, &call_site_local, INSERT);
   if (*slot != NULL)
     {
@@ -13399,14 +13399,16 @@ read_call_site_scope (struct die_info *die, struct dwarf2_cu *cu)
       nparams++;
     }
 
-  call_site
-    = ((struct call_site *)
-       obstack_alloc (&objfile->objfile_obstack,
-		      sizeof (*call_site)
-		      + (sizeof (*call_site->parameter) * (nparams - 1))));
+  struct call_site *call_site
+    = new (XOBNEWVAR (&objfile->objfile_obstack,
+		      struct call_site,
+		      sizeof (*call_site) + sizeof (call_site->parameter[0]) * nparams))
+    struct call_site (pc, cu->per_cu, per_objfile);
   *slot = call_site;
-  memset (call_site, 0, sizeof (*call_site) - sizeof (*call_site->parameter));
-  call_site->pc = pc;
+
+  /* We never call the destructor of call_site, so we must ensure it is
+     trivially destructible.  */
+  gdb_static_assert(std::is_trivially_destructible<struct call_site>::value);
 
   if (dwarf2_flag_true_p (die, DW_AT_call_tail_call, cu)
       || dwarf2_flag_true_p (die, DW_AT_GNU_tail_call, cu))
@@ -13467,7 +13469,8 @@ read_call_site_scope (struct die_info *die, struct dwarf2_cu *cu)
       /* This was a pre-DWARF-5 GNU extension alias for DW_AT_call_origin.  */
       attr = dwarf2_attr (die, DW_AT_abstract_origin, cu);
     }
-  SET_FIELD_DWARF_BLOCK (call_site->target, NULL);
+
+  call_site->target.set_loc_dwarf_block (nullptr);
   if (!attr || (attr->form_is_block () && attr->as_block ()->size == 0))
     /* Keep NULL DWARF_BLOCK.  */;
   else if (attr->form_is_block ())
@@ -13481,7 +13484,7 @@ read_call_site_scope (struct die_info *die, struct dwarf2_cu *cu)
       dlbaton->per_objfile = per_objfile;
       dlbaton->per_cu = cu->per_cu;
 
-      SET_FIELD_DWARF_BLOCK (call_site->target, dlbaton);
+      call_site->target.set_loc_dwarf_block (dlbaton);
     }
   else if (attr->form_is_ref ())
     {
@@ -13503,7 +13506,7 @@ read_call_site_scope (struct die_info *die, struct dwarf2_cu *cu)
 			 "physname, for referencing DIE %s [in module %s]"),
 		       sect_offset_str (die->sect_off), objfile_name (objfile));
 	  else
-	    SET_FIELD_PHYSNAME (call_site->target, target_physname);
+	    call_site->target.set_loc_physname (target_physname);
 	}
       else
 	{
@@ -13517,8 +13520,9 @@ read_call_site_scope (struct die_info *die, struct dwarf2_cu *cu)
 		       sect_offset_str (die->sect_off), objfile_name (objfile));
 	  else
 	    {
-	      lowpc = gdbarch_adjust_dwarf2_addr (gdbarch, lowpc + baseaddr);
-	      SET_FIELD_PHYSADDR (call_site->target, lowpc);
+	      lowpc = (gdbarch_adjust_dwarf2_addr (gdbarch, lowpc + baseaddr)
+		       - baseaddr);
+	      call_site->target.set_loc_physaddr (lowpc);
 	    }
 	}
     }
@@ -13526,9 +13530,6 @@ read_call_site_scope (struct die_info *die, struct dwarf2_cu *cu)
     complaint (_("DW_TAG_call_site DW_AT_call_target is neither "
 		 "block nor reference, for DIE %s [in module %s]"),
 	       sect_offset_str (die->sect_off), objfile_name (objfile));
-
-  call_site->per_cu = cu->per_cu;
-  call_site->per_objfile = per_objfile;
 
   for (child_die = die->child;
        child_die && child_die->tag;
@@ -14483,7 +14484,7 @@ handle_member_location (struct die_info *die, struct dwarf2_cu *cu,
       if (attr->form_is_constant ())
 	{
 	  LONGEST offset = attr->constant_value (0);
-	  SET_FIELD_BITPOS (*field, offset * bits_per_byte);
+	  field->set_loc_bitpos (offset * bits_per_byte);
 	}
       else if (attr->form_is_section_offset ())
 	dwarf2_complex_location_expr_complaint ();
@@ -14492,7 +14493,7 @@ handle_member_location (struct die_info *die, struct dwarf2_cu *cu,
 	  bool handled;
 	  CORE_ADDR offset = decode_locdesc (attr->as_block (), cu, &handled);
 	  if (handled)
-	    SET_FIELD_BITPOS (*field, offset * bits_per_byte);
+	    field->set_loc_bitpos (offset * bits_per_byte);
 	  else
 	    {
 	      dwarf2_per_objfile *per_objfile = cu->per_objfile;
@@ -14509,7 +14510,7 @@ handle_member_location (struct die_info *die, struct dwarf2_cu *cu,
 	      dlbaton->per_objfile = per_objfile;
 	      dlbaton->per_cu = cu->per_cu;
 
-	      SET_FIELD_DWARF_BLOCK (*field, dlbaton);
+	      field->set_loc_dwarf_block (dlbaton);
 	    }
 	}
       else
@@ -14519,7 +14520,7 @@ handle_member_location (struct die_info *die, struct dwarf2_cu *cu,
     {
       attr = dwarf2_attr (die, DW_AT_data_bit_offset, cu);
       if (attr != nullptr)
-	SET_FIELD_BITPOS (*field, attr->constant_value (0));
+	field->set_loc_bitpos (attr->constant_value (0));
     }
 }
 
@@ -14568,7 +14569,7 @@ dwarf2_add_field (struct field_info *fip, struct die_info *die,
       /* Get type of field.  */
       fp->set_type (die_type (die, cu));
 
-      SET_FIELD_BITPOS (*fp, 0);
+      fp->set_loc_bitpos (0);
 
       /* Get bit size of field (zero if none).  */
       attr = dwarf2_attr (die, DW_AT_bit_size, cu);
@@ -14593,8 +14594,7 @@ dwarf2_add_field (struct field_info *fip, struct die_info *die,
 		 anonymous object to the MSB of the field.  We don't
 		 have to do anything special since we don't need to
 		 know the size of the anonymous object.  */
-	      SET_FIELD_BITPOS (*fp, (FIELD_BITPOS (*fp)
-				      + attr->constant_value (0)));
+	      fp->set_loc_bitpos ((FIELD_BITPOS (*fp) + attr->constant_value (0)));
 	    }
 	  else
 	    {
@@ -14623,10 +14623,9 @@ dwarf2_add_field (struct field_info *fip, struct die_info *die,
 		     bit field.  */
 		  anonymous_size = TYPE_LENGTH (fp->type ());
 		}
-	      SET_FIELD_BITPOS (*fp,
-				(FIELD_BITPOS (*fp)
-				 + anonymous_size * bits_per_byte
-				 - bit_offset - FIELD_BITSIZE (*fp)));
+	      fp->set_loc_bitpos (FIELD_BITPOS (*fp)
+			      + anonymous_size * bits_per_byte
+			      - bit_offset - FIELD_BITSIZE (*fp));
 	    }
 	}
 
@@ -14637,7 +14636,7 @@ dwarf2_add_field (struct field_info *fip, struct die_info *die,
 
       /* The name is already allocated along with this objfile, so we don't
 	 need to duplicate it for the type.  */
-      fp->name = fieldname;
+      fp->set_name (fieldname);
 
       /* Change accessibility for artificial fields (e.g. virtual table
 	 pointer or virtual base class pointer) to private.  */
@@ -14682,9 +14681,9 @@ dwarf2_add_field (struct field_info *fip, struct die_info *die,
 
       /* The name is already allocated along with this objfile, so we don't
 	 need to duplicate it for the type.  */
-      SET_FIELD_PHYSNAME (*fp, physname ? physname : "");
+      fp->set_loc_physname (physname ? physname : "");
       fp->set_type (die_type (die, cu));
-      FIELD_NAME (*fp) = fieldname;
+      fp->set_name (fieldname);
     }
   else if (die->tag == DW_TAG_inheritance)
     {
@@ -14692,7 +14691,7 @@ dwarf2_add_field (struct field_info *fip, struct die_info *die,
       handle_member_location (die, cu, fp);
       FIELD_BITSIZE (*fp) = 0;
       fp->set_type (die_type (die, cu));
-      FIELD_NAME (*fp) = fp->type ()->name ();
+      fp->set_name (fp->type ()->name ());
     }
   else
     gdb_assert_not_reached ("missing case in dwarf2_add_field");
@@ -15327,10 +15326,10 @@ quirk_gcc_member_function_pointer (struct type *type, struct objfile *objfile)
     return;
 
   /* Check for __pfn and __delta members.  */
-  if (TYPE_FIELD_NAME (type, 0) == NULL
-      || strcmp (TYPE_FIELD_NAME (type, 0), "__pfn") != 0
-      || TYPE_FIELD_NAME (type, 1) == NULL
-      || strcmp (TYPE_FIELD_NAME (type, 1), "__delta") != 0)
+  if (type->field (0).name () == NULL
+      || strcmp (type->field (0).name (), "__pfn") != 0
+      || type->field (1).name () == NULL
+      || strcmp (type->field (1).name (), "__delta") != 0)
     return;
 
   /* Find the type of the method.  */
@@ -15421,10 +15420,10 @@ quirk_ada_thick_pointer_struct (struct die_info *die, struct dwarf2_cu *cu,
     return;
 
   /* Check for P_ARRAY and P_BOUNDS members.  */
-  if (TYPE_FIELD_NAME (type, 0) == NULL
-      || strcmp (TYPE_FIELD_NAME (type, 0), "P_ARRAY") != 0
-      || TYPE_FIELD_NAME (type, 1) == NULL
-      || strcmp (TYPE_FIELD_NAME (type, 1), "P_BOUNDS") != 0)
+  if (type->field (0).name () == NULL
+      || strcmp (type->field (0).name (), "P_ARRAY") != 0
+      || type->field (1).name () == NULL
+      || strcmp (type->field (1).name (), "P_BOUNDS") != 0)
     return;
 
   /* Make sure we're looking at a pointer to an array.  */
@@ -15937,7 +15936,7 @@ process_structure_scope (struct die_info *die, struct dwarf2_cu *cu)
 		       i >= TYPE_N_BASECLASSES (t);
 		       --i)
 		    {
-		      const char *fieldname = TYPE_FIELD_NAME (t, i);
+		      const char *fieldname = t->field (i).name ();
 
 		      if (is_vtable_name (fieldname, cu))
 			{
@@ -15970,7 +15969,7 @@ process_structure_scope (struct die_info *die, struct dwarf2_cu *cu)
 		   i >= TYPE_N_BASECLASSES (type);
 		   --i)
 		{
-		  if (strcmp (TYPE_FIELD_NAME (type, i), "__vfp") == 0)
+		  if (strcmp (type->field (i).name (), "__vfp") == 0)
 		    {
 		      set_type_vptr_fieldno (type, i);
 		      set_type_vptr_basetype (type, type);
@@ -16141,8 +16140,8 @@ update_enumeration_type_from_children (struct die_info *die,
 
       fields.emplace_back ();
       struct field &field = fields.back ();
-      FIELD_NAME (field) = dwarf2_physname (name, child_die, cu);
-      SET_FIELD_ENUMVAL (field, value);
+      field.set_name (dwarf2_physname (name, child_die, cu));
+      field.set_loc_enumval (value);
     }
 
   if (!fields.empty ())
@@ -16416,7 +16415,7 @@ recognize_bound_expression (struct die_info *die, enum dwarf_attribute name,
   else
     return false;
 
-  SET_FIELD_BITPOS (*field, 8 * offset);
+  field->set_loc_bitpos (8 * offset);
   if (size != TYPE_LENGTH (field->type ()))
     FIELD_BITSIZE (*field) = 8 * size;
 
@@ -16515,9 +16514,9 @@ quirk_ada_thick_pointer (struct die_info *die, struct dwarf2_cu *cu,
 
       /* Set the name of each field in the bounds.  */
       xsnprintf (name, sizeof (name), "LB%d", i / 2);
-      FIELD_NAME (range_fields[i]) = objfile->intern (name);
+      range_fields[i].set_name (objfile->intern (name));
       xsnprintf (name, sizeof (name), "UB%d", i / 2);
-      FIELD_NAME (range_fields[i + 1]) = objfile->intern (name);
+      range_fields[i + 1].set_name (objfile->intern (name));
     }
 
   struct type *bounds = alloc_type (objfile);
@@ -16559,12 +16558,12 @@ quirk_ada_thick_pointer (struct die_info *die, struct dwarf2_cu *cu,
   /* The names are chosen to coincide with what the compiler does with
      -fgnat-encodings=all, which the Ada code in gdb already
      understands.  */
-  TYPE_FIELD_NAME (result, 0) = "P_ARRAY";
+  result->field (0).set_name ("P_ARRAY");
   result->field (0).set_type (lookup_pointer_type (type));
 
-  TYPE_FIELD_NAME (result, 1) = "P_BOUNDS";
+  result->field (1).set_name ("P_BOUNDS");
   result->field (1).set_type (lookup_pointer_type (bounds));
-  SET_FIELD_BITPOS (result->field (1), 8 * bounds_offset);
+  result->field (1).set_loc_bitpos (8 * bounds_offset);
 
   result->set_name (type->name ());
   TYPE_LENGTH (result) = (TYPE_LENGTH (result->field (0).type ())

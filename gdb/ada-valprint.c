@@ -388,7 +388,7 @@ ada_print_scalar (struct type *type, LONGEST val, struct ui_file *stream)
 	}
       if (i < len)
 	{
-	  fputs_styled (ada_enum_name (TYPE_FIELD_NAME (type, i)),
+	  fputs_styled (ada_enum_name (type->field (i).name ()),
 			variable_name_style.style (), stream);
 	}
       else
@@ -619,8 +619,8 @@ print_field_values (struct value *value, struct value *outer_value,
 
       annotate_field_begin (type->field (i).type ());
       fprintf_filtered (stream, "%.*s",
-			ada_name_prefix_len (TYPE_FIELD_NAME (type, i)),
-			TYPE_FIELD_NAME (type, i));
+			ada_name_prefix_len (type->field (i).name ()),
+			type->field (i).name ());
       annotate_field_name_end ();
       fputs_filtered (" => ", stream);
       annotate_field_value ();
@@ -841,7 +841,7 @@ ada_val_print_enum (struct value *value, struct ui_file *stream, int recurse,
 
   if (i < len)
     {
-      const char *name = ada_enum_name (TYPE_FIELD_NAME (type, i));
+      const char *name = ada_enum_name (type->field (i).name ());
 
       if (name[0] == '\'')
 	fprintf_filtered (stream, "%ld %ps", (long) val,
@@ -969,12 +969,6 @@ ada_val_print_ref (struct type *type, const gdb_byte *valaddr,
 					 deref_val_int));
   if (ada_is_tagged_type (value_type (deref_val), 1))
     deref_val = ada_tag_value_at_base_address (deref_val);
-
-  /* Make sure that the object does not have an unreasonable size
-     before trying to print it.  This can happen for instance with
-     references to dynamic objects whose contents is uninitialized
-     (Eg: an array whose bounds are not set yet).  */
-  ada_ensure_varsize_limit (value_type (deref_val));
 
   if (value_lazy (deref_val))
     value_fetch_lazy (deref_val);

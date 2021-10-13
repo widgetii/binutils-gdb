@@ -935,17 +935,6 @@ value_dynamic_cast (struct type *type, struct value *arg)
   error (_("dynamic_cast failed"));
 }
 
-/* Create a value of type TYPE that is zero, and return it.  */
-
-struct value *
-value_zero (struct type *type, enum lval_type lv)
-{
-  struct value *val = allocate_value (type);
-
-  VALUE_LVAL (val) = (lv == lval_computed ? not_lval : lv);
-  return val;
-}
-
 /* Create a not_lval value of numeric type TYPE that is one, and return it.  */
 
 struct value *
@@ -1993,7 +1982,7 @@ struct_field_searcher::search (struct value *arg1, LONGEST offset,
   if (!m_looking_for_baseclass)
     for (i = type->num_fields () - 1; i >= nbases; i--)
       {
-	const char *t_field_name = TYPE_FIELD_NAME (type, i);
+	const char *t_field_name = type->field (i).name ();
 
 	if (t_field_name && (strcmp_iw (t_field_name, m_name) == 0))
 	  {
@@ -3337,7 +3326,7 @@ enum_constant_from_type (struct type *type, const char *name)
 
   for (i = TYPE_N_BASECLASSES (type); i < type->num_fields (); ++i)
     {
-      const char *fname = TYPE_FIELD_NAME (type, i);
+      const char *fname = type->field (i).name ();
       int len;
 
       if (TYPE_FIELD_LOC_KIND (type, i) != FIELD_LOC_KIND_ENUMVAL
@@ -3509,7 +3498,7 @@ value_struct_elt_for_reference (struct type *domain, int offset,
 
   for (i = t->num_fields () - 1; i >= TYPE_N_BASECLASSES (t); i--)
     {
-      const char *t_field_name = TYPE_FIELD_NAME (t, i);
+      const char *t_field_name = t->field (i).name ();
 
       if (t_field_name && strcmp (t_field_name, name) == 0)
 	{

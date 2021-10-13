@@ -231,12 +231,12 @@ cp_print_value_fields (struct value *val, struct ui_file *stream,
 	    {
 	      fputs_filtered ("static ", stream);
 	      fprintf_symbol_filtered (stream,
-				       TYPE_FIELD_NAME (type, i),
+				       type->field (i).name (),
 				       current_language->la_language,
 				       DMGL_PARAMS | DMGL_ANSI);
 	    }
 	  else
-	    fputs_styled (TYPE_FIELD_NAME (type, i),
+	    fputs_styled (type->field (i).name (),
 			  variable_name_style.style (), stream);
 	  annotate_field_name_end ();
 
@@ -246,7 +246,7 @@ cp_print_value_fields (struct value *val, struct ui_file *stream,
 
 	  /* Do not print leading '=' in case of anonymous
 	     unions.  */
-	  if (strcmp (TYPE_FIELD_NAME (type, i), ""))
+	  if (strcmp (type->field (i).name (), ""))
 	    fputs_filtered (" = ", stream);
 	  else
 	    {
@@ -710,7 +710,7 @@ cp_print_class_member (const gdb_byte *valaddr, struct type *type,
       else
 	c_type_print_base (self_type, stream, 0, 0, &type_print_raw_options);
       fprintf_filtered (stream, "::");
-      fputs_styled (TYPE_FIELD_NAME (self_type, fieldno),
+      fputs_styled (self_type->field (fieldno).name (),
 		    variable_name_style.style (), stream);
     }
   else
@@ -735,13 +735,13 @@ test_print_fields (gdbarch *arch)
   if (gdbarch_byte_order (arch) == BFD_ENDIAN_LITTLE)
     {
       f = append_composite_type_field_raw (the_struct, "A", bool_type);
-      SET_FIELD_BITPOS (*f, 1);
+      f->set_loc_bitpos (1);
       FIELD_BITSIZE (*f) = 1;
       f = append_composite_type_field_raw (the_struct, "B", uint8_type);
-      SET_FIELD_BITPOS (*f, 3);
+      f->set_loc_bitpos (3);
       FIELD_BITSIZE (*f) = 3;
       f = append_composite_type_field_raw (the_struct, "C", bool_type);
-      SET_FIELD_BITPOS (*f, 7);
+      f->set_loc_bitpos (7);
       FIELD_BITSIZE (*f) = 1;
     }
   /* According to the logic commented in "make_gdb_type_struct ()" of
@@ -750,13 +750,13 @@ test_print_fields (gdbarch *arch)
   else
     {
       f = append_composite_type_field_raw (the_struct, "A", bool_type);
-      SET_FIELD_BITPOS (*f, 30);
+      f->set_loc_bitpos (30);
       FIELD_BITSIZE (*f) = 1;
       f = append_composite_type_field_raw (the_struct, "B", uint8_type);
-      SET_FIELD_BITPOS (*f, 26);
+      f->set_loc_bitpos (26);
       FIELD_BITSIZE (*f) = 3;
       f = append_composite_type_field_raw (the_struct, "C", bool_type);
-      SET_FIELD_BITPOS (*f, 24);
+      f->set_loc_bitpos (24);
       FIELD_BITSIZE (*f) = 1;
     }
 

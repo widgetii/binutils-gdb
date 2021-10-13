@@ -247,9 +247,6 @@ struct ada_symbol_cache
   struct cache_entry *root[HASH_SIZE] {};
 };
 
-/* Maximum-sized dynamic type.  */
-static unsigned int varsize_limit;
-
 static const char ada_completer_word_break_characters[] =
 #ifdef VMS
   " \t\n!@#%^&*()+=|~`}{[]\";:?/,-";
@@ -468,7 +465,7 @@ ada_get_field_index (const struct type *type, const char *field_name,
   struct type *struct_type = check_typedef ((struct type *) type);
 
   for (fieldno = 0; fieldno < struct_type->num_fields (); fieldno++)
-    if (field_name_match (TYPE_FIELD_NAME (struct_type, fieldno), field_name))
+    if (field_name_match (struct_type->field (fieldno).name (), field_name))
       return fieldno;
 
   if (!maybe_missing)
@@ -523,10 +520,6 @@ coerce_unspec_val_to_type (struct value *val, struct type *type)
   else
     {
       struct value *result;
-
-      /* Make sure that the object size is not unreasonable before
-	 trying to allocate some memory for it.  */
-      ada_ensure_varsize_limit (type);
 
       if (value_optimized_out (val))
 	result = allocate_optimized_out_value (type);
@@ -587,17 +580,6 @@ lim_warning (const char *format, ...)
     vwarning (format, args);
 
   va_end (args);
-}
-
-/* Issue an error if the size of an object of type T is unreasonable,
-   i.e. if it would be a bad idea to allocate a value of this type in
-   GDB.  */
-
-void
-ada_ensure_varsize_limit (const struct type *type)
-{
-  if (TYPE_LENGTH (type) > varsize_limit)
-    error (_("object size is larger than varsize-limit"));
 }
 
 /* Maximum value of a SIZE-byte signed integer type.  */
@@ -1324,12 +1306,6 @@ ada_decode_symbol (const struct general_symbol_info *arg)
   return *resultp;
 }
 
-static char *
-ada_la_decode (const char *encoded, int options)
-{
-  return xstrdup (ada_decode (encoded).c_str ());
-}
-
 
 
 				/* Arrays */
@@ -1375,13 +1351,13 @@ ada_fixup_array_indexes_type (struct type *index_desc_type)
      is not equal to the field name.  */
   if (index_desc_type->field (0).type ()->name () != NULL
       && strcmp (index_desc_type->field (0).type ()->name (),
-		 TYPE_FIELD_NAME (index_desc_type, 0)) == 0)
+		 index_desc_type->field (0).name ()) == 0)
     return;
 
   /* Fixup each field of INDEX_DESC_TYPE.  */
   for (i = 0; i < index_desc_type->num_fields (); i++)
    {
-     const char *name = TYPE_FIELD_NAME (index_desc_type, i);
+     const char *name = index_desc_type->field (i).name ();
      struct type *raw_type = ada_check_typedef (ada_find_any_type (name));
 
      if (raw_type)
@@ -1904,7 +1880,6 @@ ada_coerce_to_simple_array (struct value *arr)
 
       if (arrVal == NULL)
 	error (_("Bounds unavailable for null array pointer."));
-      ada_ensure_varsize_limit (TYPE_TARGET_TYPE (value_type (arrVal)));
       return value_ind (arrVal);
     }
   else if (ada_is_constrained_packed_array_type (value_type (arr)))
@@ -4644,16 +4619,16 @@ ada_identical_enum_types_p (struct type *type1, struct type *type2)
      suffix).  */
   for (i = 0; i < type1->num_fields (); i++)
     {
-      const char *name_1 = TYPE_FIELD_NAME (type1, i);
-      const char *name_2 = TYPE_FIELD_NAME (type2, i);
+      const char *name_1 = type1->field (i).name ();
+      const char *name_2 = type2->field (i).name ();
       int len_1 = strlen (name_1);
       int len_2 = strlen (name_2);
 
-      ada_remove_trailing_digits (TYPE_FIELD_NAME (type1, i), &len_1);
-      ada_remove_trailing_digits (TYPE_FIELD_NAME (type2, i), &len_2);
+      ada_remove_trailing_digits (type1->field (i).name (), &len_1);
+      ada_remove_trailing_digits (type2->field (i).name (), &len_2);
       if (len_1 != len_2
-	  || strncmp (TYPE_FIELD_NAME (type1, i),
-		      TYPE_FIELD_NAME (type2, i),
+	  || strncmp (type1->field (i).name (),
+		      type2->field (i).name (),
 		      len_1) != 0)
 	return 0;
     }
@@ -5972,7 +5947,7 @@ ada_is_ignored_field (struct type *type, int field_num)
 
   /* Check the name of that field.  */
   {
-    const char *name = TYPE_FIELD_NAME (type, field_num);
+    const char *name = type->field (field_num).name ();
 
     /* Anonymous field names should not be printed.
        brobecker/2007-02-20: I don't think this can actually happen
@@ -6331,7 +6306,7 @@ ada_parent_type (struct type *type)
 int
 ada_is_parent_field (struct type *type, int field_num)
 {
-  const char *name = TYPE_FIELD_NAME (ada_check_typedef (type), field_num);
+  const char *name = ada_check_typedef (type)->field (field_num).name ();
 
   return (name != NULL
 	  && (startswith (name, "PARENT")
@@ -6347,7 +6322,7 @@ ada_is_parent_field (struct type *type, int field_num)
 int
 ada_is_wrapper_field (struct type *type, int field_num)
 {
-  const char *name = TYPE_FIELD_NAME (type, field_num);
+  const char *name = type->field (field_num).name ();
 
   if (name != NULL && strcmp (name, "RETVAL") == 0)
     {
@@ -6406,7 +6381,7 @@ ada_variant_discrim_type (struct type *var_type, struct type *outer_type)
 static int
 ada_is_others_clause (struct type *type, int field_num)
 {
-  const char *name = TYPE_FIELD_NAME (type, field_num);
+  const char *name = type->field (field_num).name ();
 
   return (name != NULL && name[0] == 'O');
 }
@@ -6511,7 +6486,7 @@ ada_scan_number (const char str[], int k, LONGEST * R, int *new_k)
 static int
 ada_in_variant (LONGEST val, struct type *type, int field_num)
 {
-  const char *name = TYPE_FIELD_NAME (type, field_num);
+  const char *name = type->field (field_num).name ();
   int p;
 
   p = 0;
@@ -6671,7 +6646,7 @@ find_struct_field (const char *name, struct type *type, int offset,
     {
       int bit_pos = TYPE_FIELD_BITPOS (type, i);
       int fld_offset = offset + bit_pos / 8;
-      const char *t_field_name = TYPE_FIELD_NAME (type, i);
+      const char *t_field_name = type->field (i).name ();
 
       if (t_field_name == NULL)
 	continue;
@@ -6781,7 +6756,7 @@ ada_search_struct_field (const char *name, struct value *arg, int offset,
   type = ada_check_typedef (type);
   for (i = 0; i < type->num_fields (); i += 1)
     {
-      const char *t_field_name = TYPE_FIELD_NAME (type, i);
+      const char *t_field_name = type->field (i).name ();
 
       if (t_field_name == NULL)
 	continue;
@@ -6881,7 +6856,7 @@ ada_index_struct_field_1 (int *index_p, struct value *arg, int offset,
 
   for (i = 0; i < type->num_fields (); i += 1)
     {
-      if (TYPE_FIELD_NAME (type, i) == NULL)
+      if (type->field (i).name () == NULL)
 	continue;
       else if (ada_is_wrapper_field (type, i))
 	{
@@ -6974,7 +6949,7 @@ ada_lookup_struct_elt_type (struct type *type, const char *name, int refok,
 
   for (i = 0; i < type->num_fields (); i += 1)
     {
-      const char *t_field_name = TYPE_FIELD_NAME (type, i);
+      const char *t_field_name = type->field (i).name ();
       struct type *t;
 
       if (t_field_name == NULL)
@@ -7016,7 +6991,7 @@ ada_lookup_struct_elt_type (struct type *type, const char *name, int refok,
 		 NOT wrapped in a struct, since the compiler sometimes
 		 generates these for unchecked variant types.  Revisit
 		 if the compiler changes this practice.  */
-	      const char *v_field_name = TYPE_FIELD_NAME (field_type, j);
+	      const char *v_field_name = field_type->field (j).name ();
 
 	      if (v_field_name != NULL 
 		  && field_name_match (v_field_name, name))
@@ -7182,7 +7157,7 @@ ada_coerce_ref (struct value *val0)
 static unsigned int
 field_alignment (struct type *type, int f)
 {
-  const char *name = TYPE_FIELD_NAME (type, f);
+  const char *name = type->field (f).name ();
   int len;
   int align_offset;
 
@@ -7425,7 +7400,7 @@ dynamic_template_type (struct type *type)
 static int
 is_dynamic_field (struct type *templ_type, int field_num)
 {
-  const char *name = TYPE_FIELD_NAME (templ_type, field_num);
+  const char *name = templ_type->field (field_num).name ();
 
   return name != NULL
     && templ_type->field (field_num).type ()->code () == TYPE_CODE_PTR
@@ -7528,7 +7503,7 @@ ada_template_to_fixed_record_type_1 (struct type *type,
     {
       off = align_up (off, field_alignment (type, f))
 	+ TYPE_FIELD_BITPOS (type, f);
-      SET_FIELD_BITPOS (rtype->field (f), off);
+      rtype->field (f).set_loc_bitpos (off);
       TYPE_FIELD_BITSIZE (rtype, f) = 0;
 
       if (ada_is_variant_part (type, f))
@@ -7545,12 +7520,6 @@ ada_template_to_fixed_record_type_1 (struct type *type,
 
 	  if (dval0 == NULL)
 	    {
-	      /* rtype's length is computed based on the run-time
-		 value of discriminants.  If the discriminants are not
-		 initialized, the type size may be completely bogus and
-		 GDB may fail to allocate a value for it.  So check the
-		 size first before creating the value.  */
-	      ada_ensure_varsize_limit (rtype);
 	      /* Using plain value_from_contents_and_address here
 		 causes problems because we will end up trying to
 		 resolve a type that is currently being
@@ -7591,17 +7560,9 @@ ada_template_to_fixed_record_type_1 (struct type *type,
 	  field_type = ada_get_base_type (field_type);
 	  field_type = ada_to_fixed_type (field_type, field_valaddr,
 					  field_address, dval, 0);
-	  /* If the field size is already larger than the maximum
-	     object size, then the record itself will necessarily
-	     be larger than the maximum object size.  We need to make
-	     this check now, because the size might be so ridiculously
-	     large (due to an uninitialized variable in the inferior)
-	     that it would cause an overflow when adding it to the
-	     record size.  */
-	  ada_ensure_varsize_limit (field_type);
 
 	  rtype->field (f).set_type (field_type);
-	  TYPE_FIELD_NAME (rtype, f) = TYPE_FIELD_NAME (type, f);
+	  rtype->field (f).set_name (type->field (f).name ());
 	  /* The multiplication can potentially overflow.  But because
 	     the field length has been size-checked just above, and
 	     assuming that the maximum size is a reasonable value,
@@ -7624,7 +7585,7 @@ ada_template_to_fixed_record_type_1 (struct type *type,
 	     to distinguish between the two options.  Stripping it
 	     would prevent us from printing this field appropriately.  */
 	  rtype->field (f).set_type (type->field (f).type ());
-	  TYPE_FIELD_NAME (rtype, f) = TYPE_FIELD_NAME (type, f);
+	  rtype->field (f).set_name (type->field (f).name ());
 	  if (TYPE_FIELD_BITSIZE (type, f) > 0)
 	    fld_bit_len =
 	      TYPE_FIELD_BITSIZE (rtype, f) = TYPE_FIELD_BITSIZE (type, f);
@@ -7686,7 +7647,7 @@ ada_template_to_fixed_record_type_1 (struct type *type,
       else
 	{
 	  rtype->field (variant_field).set_type (branch_type);
-	  TYPE_FIELD_NAME (rtype, variant_field) = "S";
+	  rtype->field (variant_field).set_name ("S");
 	  fld_bit_len =
 	    TYPE_LENGTH (rtype->field (variant_field).type ()) *
 	    TARGET_CHAR_BIT;
@@ -7719,8 +7680,6 @@ ada_template_to_fixed_record_type_1 (struct type *type,
     }
 
   value_free_to_mark (mark);
-  if (TYPE_LENGTH (rtype) > varsize_limit)
-    error (_("record type with dynamic size is larger than varsize-limit"));
   return rtype;
 }
 
@@ -7802,7 +7761,7 @@ template_to_static_fixed_type (struct type *type0)
 	      TYPE_LENGTH (type) = 0;
 	    }
 	  type->field (f).set_type (new_type);
-	  TYPE_FIELD_NAME (type, f) = TYPE_FIELD_NAME (type0, f);
+	  type->field (f).set_name (type0->field (f).name ());
 	}
     }
 
@@ -7871,7 +7830,7 @@ to_record_with_fixed_variant_part (struct type *type, const gdb_byte *valaddr,
   else
     {
       rtype->field (variant_field).set_type (branch_type);
-      TYPE_FIELD_NAME (rtype, variant_field) = "S";
+      rtype->field (variant_field).set_name ("S");
       TYPE_FIELD_BITSIZE (rtype, variant_field) = 0;
       TYPE_LENGTH (rtype) += TYPE_LENGTH (branch_type);
     }
@@ -8167,8 +8126,6 @@ to_fixed_array_type (struct type *type0, struct value *dval,
 				      result, range_type);
 	  elt_type0 = TYPE_TARGET_TYPE (elt_type0);
 	}
-      if (!ignore_too_big && TYPE_LENGTH (result) > varsize_limit)
-	error (_("array type with dynamic size is larger than varsize-limit"));
     }
 
   /* We want to preserve the type name.  This can be useful when
@@ -8691,7 +8648,7 @@ ada_is_aligner_type (struct type *type)
 
   return (type->code () == TYPE_CODE_STRUCT
 	  && type->num_fields () == 1
-	  && strcmp (TYPE_FIELD_NAME (type, 0), "F") == 0);
+	  && strcmp (type->field (0).name (), "F") == 0);
 }
 
 /* If there is an ___XVS-convention type parallel to SUBTYPE, return
@@ -8732,7 +8689,7 @@ ada_get_base_type (struct type *raw_type)
       /* This is an older encoding form where the base type needs to be
 	 looked up by name.  We prefer the newer encoding because it is
 	 more efficient.  */
-      raw_real_type = ada_find_any_type (TYPE_FIELD_NAME (real_type_namer, 0));
+      raw_real_type = ada_find_any_type (real_type_namer->field (0).name ());
       if (raw_real_type == NULL)
 	return raw_type;
       else
@@ -10229,7 +10186,7 @@ convert_char_literal (struct type *type, LONGEST val)
 	 have a name like "pkg__QUxx".  This is safe enough because we
 	 already have the correct type, and because mangling means
 	 there can't be clashes.  */
-      const char *ename = TYPE_FIELD_NAME (type, f);
+      const char *ename = type->field (f).name ();
       size_t elen = strlen (ename);
 
       if (elen >= len && strcmp (name, ename + elen - len) == 0)
@@ -10590,7 +10547,6 @@ ada_unop_ind_operation::evaluate (struct type *expect_type,
 		(ada_aligned_type
 		 (ada_check_typedef (TYPE_TARGET_TYPE (type))));
 	    }
-	  ada_ensure_varsize_limit (type);
 	  return value_zero (type, lval_memory);
 	}
       else if (type->code () == TYPE_CODE_INT)
@@ -10624,11 +10580,6 @@ ada_unop_ind_operation::evaluate (struct type *expect_type,
 	return value_at_lazy (builtin_type (exp->gdbarch)->builtin_int,
 			      (CORE_ADDR) value_as_address (arg1));
     }
-
-  struct type *target_type = (to_static_fixed_type
-			      (ada_aligned_type
-			       (ada_check_typedef (TYPE_TARGET_TYPE (type)))));
-  ada_ensure_varsize_limit (target_type);
 
   if (ada_is_array_descriptor_type (type))
     /* GDB allows dereferencing GNAT array descriptors.  */
@@ -13116,8 +13067,9 @@ public:
   }
 
   /* See language.h.  */
-  bool sniff_from_mangled_name (const char *mangled,
-				char **out) const override
+  bool sniff_from_mangled_name
+       (const char *mangled,
+	gdb::unique_xmalloc_ptr<char> *out) const override
   {
     std::string demangled = ada_decode (mangled);
 
@@ -13155,9 +13107,10 @@ public:
 
   /* See language.h.  */
 
-  char *demangle_symbol (const char *mangled, int options) const override
+  gdb::unique_xmalloc_ptr<char> demangle_symbol (const char *mangled,
+						 int options) const override
   {
-    return ada_la_decode (mangled, options);
+    return make_unique_xstrdup (ada_decode (mangled).c_str ());
   }
 
   /* See language.h.  */
@@ -13596,15 +13549,6 @@ exception should cause a stop."),
 		     NULL,
 		     CATCH_PERMANENT,
 		     CATCH_TEMPORARY);
-
-  varsize_limit = 65536;
-  add_setshow_uinteger_cmd ("varsize-limit", class_support,
-			    &varsize_limit, _("\
-Set the maximum number of bytes allowed in a variable-size object."), _("\
-Show the maximum number of bytes allowed in a variable-size object."), _("\
-Attempts to access an object whose size is not a compile-time constant\n\
-and exceeds this limit will cause an error."),
-			    NULL, NULL, &setlist, &showlist);
 
   add_info ("exceptions", info_exceptions_command,
 	    _("\

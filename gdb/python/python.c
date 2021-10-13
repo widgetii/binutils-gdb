@@ -36,6 +36,7 @@
 #include "location.h"
 #include "run-on-main-thread.h"
 #include "gdbsupport/selftest.h"
+#include "observable.h"
 
 /* Declared constants and enum for python stack printing.  */
 static const char python_excp_none[] = "none";
@@ -449,9 +450,9 @@ python_command (const char *arg, int from_tty)
    NULL (and set a Python exception) on error.  Helper function for
    get_parameter.  */
 PyObject *
-gdbpy_parameter_value (enum var_types type, void *var)
+gdbpy_parameter_value (const setting &var)
 {
-  switch (type)
+  switch (var.type ())
     {
     case var_string:
     case var_string_noescape:
@@ -459,16 +460,18 @@ gdbpy_parameter_value (enum var_types type, void *var)
     case var_filename:
     case var_enum:
       {
-	const char *str = *(char **) var;
+	const char *str;
+	if (var.type () == var_enum)
+	  str = var.get<const char *> ();
+	else
+	  str = var.get<std::string> ().c_str ();
 
-	if (! str)
-	  str = "";
 	return host_string_to_python_string (str).release ();
       }
 
     case var_boolean:
       {
-	if (* (bool *) var)
+	if (var.get<bool> ())
 	  Py_RETURN_TRUE;
 	else
 	  Py_RETURN_FALSE;
@@ -476,7 +479,7 @@ gdbpy_parameter_value (enum var_types type, void *var)
 
     case var_auto_boolean:
       {
-	enum auto_boolean ab = * (enum auto_boolean *) var;
+	enum auto_boolean ab = var.get<enum auto_boolean> ();
 
 	if (ab == AUTO_BOOLEAN_TRUE)
 	  Py_RETURN_TRUE;
@@ -487,16 +490,16 @@ gdbpy_parameter_value (enum var_types type, void *var)
       }
 
     case var_integer:
-      if ((* (int *) var) == INT_MAX)
+      if (var.get<int> () == INT_MAX)
 	Py_RETURN_NONE;
       /* Fall through.  */
     case var_zinteger:
     case var_zuinteger_unlimited:
-      return gdb_py_object_from_longest (* (int *) var).release ();
+      return gdb_py_object_from_longest (var.get<int> ()).release ();
 
     case var_uinteger:
       {
-	unsigned int val = * (unsigned int *) var;
+	unsigned int val = var.get<unsigned int> ();
 
 	if (val == UINT_MAX)
 	  Py_RETURN_NONE;
@@ -505,7 +508,7 @@ gdbpy_parameter_value (enum var_types type, void *var)
 
     case var_zuinteger:
       {
-	unsigned int val = * (unsigned int *) var;
+	unsigned int val = var.get<unsigned int> ();
 	return gdb_py_object_from_ulongest (val).release ();
       }
     }
@@ -542,10 +545,11 @@ gdbpy_parameter (PyObject *self, PyObject *args)
     return PyErr_Format (PyExc_RuntimeError,
 			 _("Could not find parameter `%s'."), arg);
 
-  if (! cmd->var)
+  if (!cmd->var.has_value ())
     return PyErr_Format (PyExc_RuntimeError,
 			 _("`%s' is not a parameter."), arg);
-  return gdbpy_parameter_value (cmd->var_type, cmd->var);
+
+  return gdbpy_parameter_value (*cmd->var);
 }
 
 /* Wrapper for target_charset.  */
@@ -1717,6 +1721,38 @@ init__gdb_module (void)
 }
 #endif
 
+/* Emit a gdb.GdbExitingEvent, return a negative value if there are any
+   errors, otherwise, return 0.  */
+
+static int
+emit_exiting_event (int exit_code)
+{
+  gdbpy_ref<> event_obj = create_event_object (&gdb_exiting_event_object_type);
+  if (event_obj == nullptr)
+    return -1;
+
+  gdbpy_ref<> code = gdb_py_object_from_longest (exit_code);
+  if (evpy_add_attribute (event_obj.get (), "exit_code", code.get ()) < 0)
+    return -1;
+
+  return evpy_emit_event (event_obj.get (), gdb_py_events.gdb_exiting);
+}
+
+/* Callback for the gdb_exiting observable.  EXIT_CODE is the value GDB
+   will exit with.  */
+
+static void
+gdbpy_gdb_exiting (int exit_code)
+{
+  if (!gdb_python_initialized)
+    return;
+
+  gdbpy_enter enter_py (python_gdbarch, python_language);
+
+  if (emit_exiting_event (exit_code) < 0)
+    gdbpy_print_stack ();
+}
+
 static bool
 do_start_initialization ()
 {
@@ -1868,6 +1904,8 @@ do_start_initialization ()
   if (gdbpy_value_cst == NULL)
     return false;
 
+  gdb::observers::gdb_exiting.attach (gdbpy_gdb_exiting, "python");
+
   /* Release the GIL while gdb runs.  */
   PyEval_SaveThread ();
 
@@ -1886,11 +1924,11 @@ namespace selftests {
 static void
 test_python ()
 {
-#define CMD execute_command_to_string ("python print(5)", 0, true);
+#define CMD(S) execute_command_to_string (S, "python print(5)", 0, true)
 
   std::string output;
 
-  output = CMD;
+  CMD (output);
   SELF_CHECK (output == "5\n");
   output.clear ();
 
@@ -1899,7 +1937,7 @@ test_python ()
     = make_scoped_restore (&gdb_python_initialized, 0);
   try
     {
-      output = CMD;
+      CMD (output);
     }
   catch (const gdb_exception &e)
     {

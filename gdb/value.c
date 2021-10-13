@@ -180,6 +180,7 @@ struct value
       lazy (1),
       initialized (1),
       stack (0),
+      is_zero (false),
       type (type_),
       enclosing_type (type_)
   {
@@ -229,6 +230,10 @@ struct value
   /* If value is from the stack.  If this is set, read_stack will be
      used instead of read_memory to enable extra caching.  */
   unsigned int stack : 1;
+
+  /* True if this is a zero value, created by 'value_zero'; false
+     otherwise.  */
+  bool is_zero : 1;
 
   /* Location of value (if lval).  */
   union
@@ -1407,10 +1412,21 @@ value_contents_writeable (struct value *value)
 int
 value_optimized_out (struct value *value)
 {
-  /* We can only know if a value is optimized out once we have tried to
-     fetch it.  */
-  if (value->optimized_out.empty () && value->lazy)
+  if (value->lazy)
     {
+      /* See if we can compute the result without fetching the
+	 value.  */
+      if (VALUE_LVAL (value) == lval_memory)
+	return false;
+      else if (VALUE_LVAL (value) == lval_computed)
+	{
+	  const struct lval_funcs *funcs = value->location.computed.funcs;
+
+	  if (funcs->is_optimized_out != nullptr)
+	    return funcs->is_optimized_out (value);
+	}
+
+      /* Fall back to fetching.  */
       try
 	{
 	  value_fetch_lazy (value);
@@ -1693,6 +1709,7 @@ value_copy (struct value *arg)
   val->pointed_to_offset = arg->pointed_to_offset;
   val->modifiable = arg->modifiable;
   val->stack = arg->stack;
+  val->is_zero = arg->is_zero;
   val->initialized = arg->initialized;
   if (!value_lazy (val))
     {
@@ -2933,7 +2950,7 @@ value_static_field (struct type *type, int fieldno)
     case FIELD_LOC_KIND_PHYSNAME:
     {
       const char *phys_name = TYPE_FIELD_STATIC_PHYSNAME (type, fieldno);
-      /* TYPE_FIELD_NAME (type, fieldno); */
+      /* type->field (fieldno).name (); */
       struct block_symbol sym = lookup_symbol (phys_name, 0, VAR_DOMAIN, 0);
 
       if (sym.symbol == NULL)
@@ -3496,6 +3513,18 @@ pack_unsigned_long (gdb_byte *buf, struct type *type, ULONGEST num)
 }
 
 
+/* Create a value of type TYPE that is zero, and return it.  */
+
+struct value *
+value_zero (struct type *type, enum lval_type lv)
+{
+  struct value *val = allocate_value_lazy (type);
+
+  VALUE_LVAL (val) = (lv == lval_computed ? not_lval : lv);
+  val->is_zero = true;
+  return val;
+}
+
 /* Convert C numbers into newly allocated values.  */
 
 struct value *
@@ -4015,7 +4044,11 @@ value_fetch_lazy (struct value *val)
      value.  */
   gdb_assert (val->optimized_out.empty ());
   gdb_assert (val->unavailable.empty ());
-  if (value_bitsize (val))
+  if (val->is_zero)
+    {
+      /* Nothing.  */
+    }
+  else if (value_bitsize (val))
     value_fetch_lazy_bitfield (val);
   else if (VALUE_LVAL (val) == lval_memory)
     value_fetch_lazy_memory (val);
@@ -4293,6 +4326,16 @@ prevents future values, larger than this size, from being allocated."),
 			    set_max_value_size,
 			    show_max_value_size,
 			    &setlist, &showlist);
+  set_show_commands vsize_limit
+    = add_setshow_zuinteger_unlimited_cmd ("varsize-limit", class_support,
+					   &max_value_size, _("\
+Set the maximum number of bytes allowed in a variable-size object."), _("\
+Show the maximum number of bytes allowed in a variable-size object."), _("\
+Attempts to access an object whose size is not a compile-time constant\n\
+and exceeds this limit will cause an error."),
+					   NULL, NULL, &setlist, &showlist);
+  deprecate_cmd (vsize_limit.set, "set max-value-size");
+
 #if GDB_SELF_TEST
   selftests::register_test ("ranges_contain", selftests::test_ranges_contain);
   selftests::register_test ("insert_into_bit_range_vector",

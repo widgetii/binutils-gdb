@@ -654,10 +654,10 @@ call_site_to_target_addr (struct gdbarch *call_site_gdbarch,
 	  {
 	    struct bound_minimal_symbol msym;
 	    
-	    msym = lookup_minimal_symbol_by_pc (call_site->pc - 1);
+	    msym = lookup_minimal_symbol_by_pc (call_site->pc () - 1);
 	    throw_error (NO_ENTRY_VALUE_ERROR,
 			 _("DW_AT_call_target is not specified at %s in %s"),
-			 paddress (call_site_gdbarch, call_site->pc),
+			 paddress (call_site_gdbarch, call_site->pc ()),
 			 (msym.minsym == NULL ? "???"
 			  : msym.minsym->print_name ()));
 			
@@ -666,12 +666,12 @@ call_site_to_target_addr (struct gdbarch *call_site_gdbarch,
 	  {
 	    struct bound_minimal_symbol msym;
 	    
-	    msym = lookup_minimal_symbol_by_pc (call_site->pc - 1);
+	    msym = lookup_minimal_symbol_by_pc (call_site->pc () - 1);
 	    throw_error (NO_ENTRY_VALUE_ERROR,
 			 _("DW_AT_call_target DWARF block resolving "
 			   "requires known frame which is currently not "
 			   "available at %s in %s"),
-			 paddress (call_site_gdbarch, call_site->pc),
+			 paddress (call_site_gdbarch, call_site->pc ()),
 			 (msym.minsym == NULL ? "???"
 			  : msym.minsym->print_name ()));
 			
@@ -700,11 +700,11 @@ call_site_to_target_addr (struct gdbarch *call_site_gdbarch,
 	msym = lookup_minimal_symbol (physname, NULL, NULL);
 	if (msym.minsym == NULL)
 	  {
-	    msym = lookup_minimal_symbol_by_pc (call_site->pc - 1);
+	    msym = lookup_minimal_symbol_by_pc (call_site->pc () - 1);
 	    throw_error (NO_ENTRY_VALUE_ERROR,
 			 _("Cannot find function \"%s\" for a call site target "
 			   "at %s in %s"),
-			 physname, paddress (call_site_gdbarch, call_site->pc),
+			 physname, paddress (call_site_gdbarch, call_site->pc ()),
 			 (msym.minsym == NULL ? "???"
 			  : msym.minsym->print_name ()));
 			
@@ -713,7 +713,14 @@ call_site_to_target_addr (struct gdbarch *call_site_gdbarch,
       }
 
     case FIELD_LOC_KIND_PHYSADDR:
-      return FIELD_STATIC_PHYSADDR (call_site->target);
+      {
+	dwarf2_per_objfile *per_objfile = call_site->per_objfile;
+	compunit_symtab *cust = per_objfile->get_symtab (call_site->per_cu);
+	int sect_idx = COMPUNIT_BLOCK_LINE_SECTION (cust);
+	CORE_ADDR delta = per_objfile->objfile->section_offsets[sect_idx];
+
+	return FIELD_STATIC_PHYSADDR (call_site->target) + delta;
+      }
 
     default:
       internal_error (__FILE__, __LINE__, _("invalid call site target kind"));
@@ -810,7 +817,7 @@ func_verify_no_selftailcall (struct gdbarch *gdbarch, CORE_ADDR verify_addr)
 static void
 tailcall_dump (struct gdbarch *gdbarch, const struct call_site *call_site)
 {
-  CORE_ADDR addr = call_site->pc;
+  CORE_ADDR addr = call_site->pc ();
   struct bound_minimal_symbol msym = lookup_minimal_symbol_by_pc (addr - 1);
 
   fprintf_unfiltered (gdb_stdlog, " %s(%s)", paddress (gdbarch, addr),
@@ -986,7 +993,7 @@ call_site_find_chain_1 (struct gdbarch *gdbarch, CORE_ADDR caller_pc,
 
 	  if (target_call_site)
 	    {
-	      if (addr_hash.insert (target_call_site->pc).second)
+	      if (addr_hash.insert (target_call_site->pc ()).second)
 		{
 		  /* Successfully entered TARGET_CALL_SITE.  */
 
@@ -1005,7 +1012,7 @@ call_site_find_chain_1 (struct gdbarch *gdbarch, CORE_ADDR caller_pc,
 	      call_site = chain.back ();
 	      chain.pop_back ();
 
-	      size_t removed = addr_hash.erase (call_site->pc);
+	      size_t removed = addr_hash.erase (call_site->pc ());
 	      gdb_assert (removed == 1);
 
 	      target_call_site = call_site->tail_call_next;
@@ -1275,6 +1282,7 @@ static const struct lval_funcs entry_data_value_funcs =
 {
   NULL,	/* read */
   NULL,	/* write */
+  nullptr,
   NULL,	/* indirect */
   entry_data_value_coerce_ref,
   NULL,	/* check_synthetic_pointer */
