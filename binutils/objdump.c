@@ -4678,22 +4678,20 @@ static int rel_compare (const void *lhs, const void *rhs)
 }
 
 static struct symbol_ref*
-enum_symbol_table (bfd *abfd, asection *section)
+enum_symbol_table (bfd *abfd ATTRIBUTE_UNUSED, asection *section)
 {
-  long storage_needed = bfd_get_symtab_upper_bound(abfd);
-
-  asymbol **symbol_table = (asymbol **)malloc(storage_needed);
-  long number_of_symbols = bfd_canonicalize_symtab(abfd, symbol_table);
-  struct symbol_ref* refs = calloc(number_of_symbols + 1, sizeof(struct symbol_ref));
+  struct symbol_ref* refs = calloc(symcount + 1, sizeof(struct symbol_ref));
 
   int n = 0;
-  for (int i = 0; i < number_of_symbols; i++) {
-      if (symbol_table[i]->section == NULL)
+
+  asymbol **sptr = syms;
+  for (int i = 0; i < symcount; i++) {
+      if ((*sptr)->section == NULL)
         continue;
 
-      if (!strcmp(symbol_table[i]->section->name, section->name)) {
+      if (!strcmp((*sptr)->section->name, section->name)) {
           symbol_info symbolinfo;
-          bfd_symbol_info(symbol_table[i], &symbolinfo);
+          bfd_symbol_info(*sptr, &symbolinfo);
 
           if (symbolinfo.name[0] != '$' && strcmp(symbolinfo.name, section->name)) {
               refs[n].offset = symbolinfo.value;
@@ -4701,10 +4699,10 @@ enum_symbol_table (bfd *abfd, asection *section)
               n++;
           }
       }
+      sptr++;
   }
-  free(symbol_table);
 
-  // make sort
+  // sort table
   qsort(refs, n, sizeof(struct symbol_ref), ref_compare);
 
   refs[n].offset = -1;
