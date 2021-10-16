@@ -134,6 +134,7 @@ static int demangle_flags = DMGL_ANSI | DMGL_PARAMS;
 
 static unsigned long cur_data;
 static unsigned long cur_offset;
+static const char* cur_filename = "";
 static char label_pr = 'L';
 
 /* A structure to record the sections mentioned in -j switches.  */
@@ -3674,6 +3675,10 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
         {
           pinfo->fprintf_func (pinfo->stream, "\n@ %lx\n", addr);
           if (sym) {
+              if (cur_filename != sym->filename) {
+                  cur_filename = sym->filename;
+                  printf("\n.file \"%s\"\n\n", cur_filename);
+              }
               if (sym->flags & BSF_GLOBAL)
                 pinfo->fprintf_func (pinfo->stream, "\t.global %s\n", bfd_asymbol_name (sym));
               if (sym->flags & BSF_FUNCTION)
@@ -4658,22 +4663,12 @@ dump_target_specific (bfd *abfd)
 
 struct symbol_ref {
     ssize_t offset;
-    const char* name;
-};
-
-struct symbol_reloc {
-    ssize_t offset;
     struct bfd_symbol* symbol;
 };
 
 static int ref_compare (const void *lhs, const void *rhs)
 {
   return ((const struct symbol_ref*)lhs)->offset - ((const struct symbol_ref*)rhs)->offset;
-}
-
-static int rel_compare (const void *lhs, const void *rhs)
-{
-  return ((const struct symbol_reloc*)lhs)->offset - ((const struct symbol_reloc*)rhs)->offset;
 }
 
 static struct symbol_ref*
@@ -4694,7 +4689,7 @@ enum_symbol_table (bfd *abfd ATTRIBUTE_UNUSED, asection *section)
 
           if (symbolinfo.name[0] != '$' && strcmp(symbolinfo.name, section->name)) {
               refs[n].offset = symbolinfo.value;
-              refs[n].name = symbolinfo.name;
+              refs[n].symbol = *sptr;
               n++;
           }
       }
@@ -4729,10 +4724,10 @@ typedef struct {
   uint8_t data[];
 } ElfNoteSection_t;
 
-static struct symbol_reloc*
+static struct symbol_ref*
 enum_reloc_symbols (bfd *abfd, asection *section)
 {
-  struct symbol_reloc* refs;
+  struct symbol_ref* refs;
 
   if (section->reloc_count) {
       int cnt = section->reloc_count;
@@ -4748,7 +4743,7 @@ enum_reloc_symbols (bfd *abfd, asection *section)
           goto err;
       }
 
-      refs = calloc(cnt + 1, sizeof(struct symbol_reloc));
+      refs = calloc(cnt + 1, sizeof(struct symbol_ref));
       struct reloc_cache_entry* ptr = section->relocation;
       int i = 0;
       for (; i < cnt; i++) {
@@ -4759,14 +4754,14 @@ enum_reloc_symbols (bfd *abfd, asection *section)
       }
 
       // make sort
-      qsort(refs, i, sizeof(struct symbol_reloc), rel_compare);
+      qsort(refs, i, sizeof(struct symbol_ref), ref_compare);
 
       refs[i].offset = -1;
       return refs;
   }
 
 err:
-  refs = calloc(1, sizeof(struct symbol_reloc));
+  refs = calloc(1, sizeof(struct symbol_ref));
   refs[0].offset = -1;
   return refs;
 }
@@ -4836,7 +4831,11 @@ dump_section (bfd *abfd, asection *section, void *dummy ATTRIBUTE_UNUSED)
               long to_skip = symbols[cref].offset - laddr;
               if (to_skip)
                 printf("\t.skip %ld\n", to_skip);
-              printf("/*%#lx*/\n%s:\n", symbols[cref].offset, symbols[cref].name);
+              if (cur_filename != symbols[cref].symbol->filename) {
+                  cur_filename = symbols[cref].symbol->filename;
+                  printf("\n.file \"%s\"\n\n", cur_filename);
+              }
+              printf("/*%#lx*/\n%s:\n", symbols[cref].offset, symbols[cref].symbol->name);
               laddr = symbols[cref].offset;
               cref++;
           }
@@ -4890,7 +4889,7 @@ dump_section (bfd *abfd, asection *section, void *dummy ATTRIBUTE_UNUSED)
       return;
     }
   struct symbol_ref* symbols = enum_symbol_table(abfd, section);
-  struct symbol_reloc* relocs = enum_reloc_symbols(abfd, section);
+  struct symbol_ref* relocs = enum_reloc_symbols(abfd, section);
   int cref = 0, crel = 0;
   print_start_section_label(section, ":\n");
 
@@ -4969,7 +4968,11 @@ dump_section (bfd *abfd, asection *section, void *dummy ATTRIBUTE_UNUSED)
               memset(ascii_str, 0, sizeof(ascii_str));
               ascii_len = 0;
             }
-            printf("%s:\n", symbols[cref].name);
+            if (cur_filename != symbols[cref].symbol->filename) {
+                cur_filename = symbols[cref].symbol->filename;
+                printf("\n.file \"%s\"\n\n", cur_filename);
+            }
+            printf("%s:\n", symbols[cref].symbol->name);
             cref++;
           }
           if ((relocs[crel].offset != -1) && (bfd_size_type)relocs[crel].offset == j) {
@@ -5034,7 +5037,7 @@ dump_section (bfd *abfd, asection *section, void *dummy ATTRIBUTE_UNUSED)
 quit:
   for (int i = 0; symbols[i].offset != -1; i++) {
     if (i >= cref)
-      printf(".set %s, %s+%#lx\n", symbols[i].name, section->name, symbols[i].offset);
+      printf(".set %s, %s+%#lx\n", symbols[i].symbol->name, section->name, symbols[i].offset);
   }
   printf("\n\n");
   free (symbols);
@@ -5522,7 +5525,12 @@ dump_bfd (bfd *abfd, bool is_mainfile)
             sprintf(nname, "%s_%d", (*sptr)->name, (*sptr)->index);
             (*sptr)->name = nname;
           }
-
+#if 0
+          if ((!strlen(cur_filename)) && (cur_filename != (*sptr)->filename)) {
+              cur_filename = (*sptr)->filename;
+              printf("\n.file \"%s\"\n\n", cur_filename);
+          }
+#endif
           sptr++;
       }
 
