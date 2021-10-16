@@ -1371,10 +1371,10 @@ discarded_section (const asection *sec)
    the_bfd, name, value, attr, section [, udata]  */
 #ifdef __STDC__
 #define GLOBAL_SYM_INIT(NAME, SECTION) \
-  { 0, NAME, 0, BSF_SECTION_SYM, SECTION, { 0 }}
+  { 0, NAME, NULL, 0, 0, BSF_SECTION_SYM, SECTION, { 0 }}
 #else
 #define GLOBAL_SYM_INIT(NAME, SECTION) \
-  { 0, NAME, 0, BSF_SECTION_SYM, SECTION }
+  { 0, NAME, NULL, 0, 0, BSF_SECTION_SYM, SECTION }
 #endif
 
 void bfd_section_list_clear (bfd *);
@@ -6296,6 +6296,9 @@ typedef struct bfd_symbol
   /* The text of the symbol. The name is left alone, and not copied; the
      application may not alter it.  */
   const char *name;
+
+  const char *filename;
+  int index;
 
   /* The value of the symbol.  This really should be a union of a
      numeric value with a pointer, since some flags indicate that

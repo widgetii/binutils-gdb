@@ -1167,6 +1167,45 @@ elf_checksum_contents (bfd *abfd,
   return true;
 }
 
+struct string_hash_entry
+{
+  struct bfd_hash_entry root;
+  int index;
+  /* Next entry in string table.  */
+  struct string_hash_entry *next;
+};
+
+/* Routine to create an entry in a string hash table.  */
+
+static struct bfd_hash_entry *
+string_hash_newfunc (struct bfd_hash_entry *entry,
+		     struct bfd_hash_table *table,
+		     const char *string)
+{
+  struct string_hash_entry *ret = (struct string_hash_entry *) entry;
+
+  /* Allocate the structure if it has not already been allocated by a
+     subclass.  */
+  if (ret == (struct string_hash_entry *) NULL)
+    ret = ((struct string_hash_entry *)
+	   bfd_hash_allocate (table, sizeof (struct string_hash_entry)));
+  if (ret == (struct string_hash_entry *) NULL)
+    return NULL;
+
+  /* Call the allocation method of the superclass.  */
+  ret = ((struct string_hash_entry *)
+	 bfd_hash_newfunc ((struct bfd_hash_entry *) ret, table, string));
+
+  if (ret)
+    {
+      /* Initialize the local fields.  */
+      ret->index = -1;
+      ret->next = NULL;
+    }
+
+  return (struct bfd_hash_entry *) ret;
+}
+
 long
 elf_slurp_symbol_table (bfd *abfd, asymbol **symptrs, bool dynamic)
 {
@@ -1182,6 +1221,12 @@ elf_slurp_symbol_table (bfd *abfd, asymbol **symptrs, bool dynamic)
   Elf_External_Versym *xverbuf = NULL;
   const struct elf_backend_data *ebd;
   size_t amt;
+  const char* cur_file = "";
+  struct bfd_hash_table allsyms;
+
+  if (!bfd_hash_table_init (&allsyms, string_hash_newfunc,
+			      sizeof (struct string_hash_entry)))
+    return -1;
 
   /* Read each raw ELF symbol, converting from external ELF form to
      internal ELF form, and then using the information to create a
@@ -1274,6 +1319,10 @@ elf_slurp_symbol_table (bfd *abfd, asymbol **symptrs, bool dynamic)
 	  sym->symbol.the_bfd = abfd;
 	  sym->symbol.name = bfd_elf_sym_name (abfd, hdr, isym, NULL);
 	  sym->symbol.value = isym->st_value;
+    sym->symbol.filename = cur_file;
+    struct bfd_hash_entry * shash =
+      bfd_hash_lookup(&allsyms, sym->symbol.name, true, false);
+    sym->symbol.index = ++((struct string_hash_entry*)shash)->index;
 
 	  if (isym->st_shndx == SHN_UNDEF)
 	    {
@@ -1357,6 +1406,8 @@ elf_slurp_symbol_table (bfd *abfd, asymbol **symptrs, bool dynamic)
 	      break;
 	    case STT_FILE:
 	      sym->symbol.flags |= BSF_FILE | BSF_DEBUGGING;
+        if (*sym->symbol.name)
+          cur_file = sym->symbol.name;
 	      break;
 	    case STT_FUNC:
 	      sym->symbol.flags |= BSF_FUNCTION;
@@ -1423,12 +1474,14 @@ elf_slurp_symbol_table (bfd *abfd, asymbol **symptrs, bool dynamic)
       *symptrs = 0;		/* Final null pointer */
     }
 
+  bfd_hash_table_free(&allsyms);
   free (xverbuf);
   if (hdr->contents != (unsigned char *) isymbuf)
     free (isymbuf);
   return symcount;
 
  error_return:
+  bfd_hash_table_free(&allsyms);
   free (xverbuf);
   if (hdr->contents != (unsigned char *) isymbuf)
     free (isymbuf);

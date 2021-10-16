@@ -4658,12 +4658,11 @@ dump_target_specific (bfd *abfd)
 
 struct symbol_ref {
     ssize_t offset;
-    char* name;
+    const char* name;
 };
 
 struct symbol_reloc {
     ssize_t offset;
-    char* name;
     struct bfd_symbol* symbol;
 };
 
@@ -4695,7 +4694,7 @@ enum_symbol_table (bfd *abfd ATTRIBUTE_UNUSED, asection *section)
 
           if (symbolinfo.name[0] != '$' && strcmp(symbolinfo.name, section->name)) {
               refs[n].offset = symbolinfo.value;
-              refs[n].name = strdup(symbolinfo.name);
+              refs[n].name = symbolinfo.name;
               n++;
           }
       }
@@ -4754,7 +4753,6 @@ enum_reloc_symbols (bfd *abfd, asection *section)
       int i = 0;
       for (; i < cnt; i++) {
           refs[i].offset = ptr->address;
-          refs[i].name = strdup(ptr->sym_ptr_ptr[0]->name);
           refs[i].symbol = ptr->sym_ptr_ptr[0];
           //printf("@ %#lX %s\n", ptr->address, ptr->sym_ptr_ptr[0]->name);
           ptr++;
@@ -4840,7 +4838,6 @@ dump_section (bfd *abfd, asection *section, void *dummy ATTRIBUTE_UNUSED)
                 printf("\t.skip %ld\n", to_skip);
               printf("/*%#lx*/\n%s:\n", symbols[cref].offset, symbols[cref].name);
               laddr = symbols[cref].offset;
-              free(symbols[cref].name);
               cref++;
           }
 
@@ -5038,10 +5035,6 @@ quit:
   for (int i = 0; symbols[i].offset != -1; i++) {
     if (i >= cref)
       printf(".set %s, %s+%#lx\n", symbols[i].name, section->name, symbols[i].offset);
-    free(symbols[i].name);
-  }
-  for (int i = 0; relocs[i].offset != -1; i++) {
-    free(relocs[i].name);
   }
   printf("\n\n");
   free (symbols);
@@ -5522,6 +5515,16 @@ dump_bfd (bfd *abfd, bool is_mainfile)
       || dump_dwarf_section_info)
     {
       syms = slurp_symtab (abfd);
+      asymbol** sptr = syms;
+      while (*sptr) {
+          if ((*sptr)->flags == BSF_LOCAL && (*sptr)->index) {
+            char* nname = malloc(strlen((*sptr)->name) + 5);
+            sprintf(nname, "%s_%d", (*sptr)->name, (*sptr)->index);
+            (*sptr)->name = nname;
+          }
+
+          sptr++;
+      }
 
       /* If following links, load any symbol tables from the linked files as well.  */
       if (do_follow_links && is_mainfile)
