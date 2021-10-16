@@ -1446,7 +1446,7 @@ objdump_print_addr_with_sym (bfd *abfd, asection *sec, asymbol *sym,
       else if (vma > bfd_asymbol_value (sym))
 	{
 	  char buf[255] = {0};
-	  sprintf(buf, "%c_", label_pr);
+	  sprintf(buf, ".%c_", label_pr);
 	  (*inf->fprintf_func) (inf->stream, buf);
 
 	  objdump_print_value (vma - bfd_asymbol_value (sym) + cur_offset, inf, true);
@@ -3014,7 +3014,7 @@ disassemble_bytes (struct disassemble_info *inf,
 	      if (*s == '\0')
 		*--s = '0';
 	      char addr[20];
-	      snprintf(addr, sizeof(addr), "%c_%s", label_pr, s);
+	      snprintf(addr, sizeof(addr), ".%c_%s", label_pr, s);
 	      printf ("%8s:\t", addr);
 	    }
 	  else
