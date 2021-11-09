@@ -5003,6 +5003,10 @@ dump_section (bfd *abfd, asection *section, void *dummy ATTRIBUTE_UNUSED)
                 case '\n':
                   ascii_str[ascii_len++] = 'n';
                   break;
+                case '\\':
+                  ascii_str[ascii_len++] = '\\';
+                  ascii_str[ascii_len++] = '\\';
+                  break;
                 default:
                   ascii_str[ascii_len++] = data[j];
               }
